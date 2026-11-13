@@ -10,8 +10,20 @@
       "destination": "/outdoor-wifi.html"
     },
     {
-      "source": "/outdoor-wifi",
-      "destination": "/outdoor-wifi.html"
+      "source": "/admin/expiry",
+      "destination": "/admin-expiry.html"
+    },
+    {
+      "source": "/admin/outdoor-wifi",
+      "destination": "/admin-outdoor-wifi.html"
+    },
+    {
+      "source": "/admin/sms",
+      "destination": "/admin-sms.html"
+    },
+    {
+      "source": "/admin",
+      "destination": "/admin.html"
     },
     {
       "source": "/",
