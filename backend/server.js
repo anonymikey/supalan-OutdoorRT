@@ -691,6 +691,8 @@ app.get('/api/orders/:id', async (req, res) => {
   }
 });
 
+app.post('/api/webhooks/courtneytech', (_req, res) => res.sendStatus(200));
+
 app.post('/api/webhooks/palpluss', async (req, res) => {
   const body = req.body || {};
   const transaction = body.transaction || body.data?.transaction || body.data || body;
@@ -935,9 +937,10 @@ app.post('/api/admin/orders/:id/confirm', requireAdmin, async (req, res) => {
   const client = await db.connect();
   try {
     await client.query('begin');
-    const orderResult = await client.query(`select id, package_id, status, voucher_id from orders where id::text = $1 or reference = $1 for update`, [id]);
+    const orderResult = await client.query(`select id, reference, package_id, status, voucher_id from orders where id::text = $1 or reference = $1 for update`, [id]);
     if (!orderResult.rowCount) { await client.query('rollback'); return res.status(404).json({ error: 'ORDER_NOT_FOUND', message: 'Order was not found.' }); }
     const order = orderResult.rows[0];
+    if (String(order.reference || '').startsWith('OW')) { await client.query('rollback'); return res.status(409).json({ error: 'OUTDOOR_RENEWAL_NOT_CONFIRMABLE', message: 'Outdoor Wi-Fi renewals are confirmed by CourtneyTech payment status and cannot be manually confirmed here.' }); }
     if (order.voucher_id) { await client.query('rollback'); return res.json({ success: true, status: 'VOUCHER_ASSIGNED', idempotent: true }); }
     if (['FAILED', 'EXPIRED'].includes(order.status)) { await client.query('rollback'); return res.status(409).json({ error: 'ORDER_NOT_CONFIRMABLE', message: 'Failed or expired orders cannot be confirmed.' }); }
     const voucher = await client.query(`select id, code from vouchers where package_id = $1 and status = 'AVAILABLE' order by created_at asc limit 1 for update skip locked`, [order.package_id]);

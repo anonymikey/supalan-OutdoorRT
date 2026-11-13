@@ -13,22 +13,33 @@ function createTestServer({ subscriber = true } = {}) {
       if (sql.includes('select 1') && sql.includes('outdoor_wifi_clients')) {
         return { rowCount: subscriber ? 1 : 0, rows: subscriber ? [{ '?column?': 1 }] : [] };
       }
+      if (sql.includes('select c.id') && sql.includes('from outdoor_wifi_clients c') && !sql.includes('left join orders')) {
+        return { rowCount: subscriber ? 1 : 0, rows: subscriber ? [{ id: '123e4567-e89b-12d3-a456-426614174000' }] : [] };
+      }
       if (sql.includes('from outdoor_wifi_clients c') && sql.includes('left join orders')) {
         if (!subscriber) return { rowCount: 0, rows: [] };
         return {
           rowCount: 1,
           rows: [{
-            id: 'client-1',
+            id: '123e4567-e89b-12d3-a456-426614174000',
             customer_name: 'Maya Njeri',
             phone: '0712345678',
             package_name: 'Weekly Unlimited',
             package_price: 150,
+            package_id: 'week',
             activation_at: new Date(NOW - 60 * 60 * 1000).toISOString(),
             expected_expiry_at: new Date(NOW + 6 * 60 * 60 * 1000).toISOString(),
             status: 'ACTIVE',
             blacklist_enabled: false,
             created_at: new Date(NOW - 60 * 60 * 1000).toISOString(),
-            paid_at: new Date(NOW - 65 * 60 * 1000).toISOString(),
+            order_id: '123e4567-e89b-12d3-a456-426614174001',
+            linked_paid_at: new Date(NOW - 65 * 60 * 1000).toISOString(),
+            previous_paid_at: null,
+            linked_order_status: 'PAID',
+            linked_payment_provider: 'PALPLUSS',
+            linked_checkout_id: null,
+            linked_amount: 150,
+            linked_package_name: 'Weekly Unlimited',
             mac_address: 'AA:BB:CC:DD:EE:FF',
             voucher_code: 'SECRET-CODE',
           }],
@@ -92,8 +103,16 @@ test('subscribers must verify an SMS code before viewing their own package', asy
   assert.equal(body.subscriber.purchaseTimeSource, 'payment');
   assert.equal(body.subscriber.phone, '+254712••••78');
   assert.equal(body.packages.length, 1);
+  assert.equal(typeof body.sessionToken, 'string');
   assert.equal(JSON.stringify(body).includes('SECRET-CODE'), false);
   assert.equal(JSON.stringify(body).includes('AA:BB:CC:DD:EE:FF'), false);
+
+  const unauthorizedRenewal = await fetch(`${base}/api/outdoor-wifi/portal/renewals/start`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ packageId: 'week' }),
+  });
+  assert.equal(unauthorizedRenewal.status, 401);
 
   const replay = await fetch(`${base}/api/outdoor-wifi/portal/verify-code`, {
     method: 'POST',
