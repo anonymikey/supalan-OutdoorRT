@@ -14,6 +14,7 @@ const { startFreeAccessSmsWorker, runFreeAccessSmsWorker } = require('./free-acc
 const { createAndScheduleExpiry, startExpiryScheduler } = require('./expiry-alerts');
 const { associateOrderCustomer } = require('./customer-contacts');
 const { normalizeMac, deriveStatus, getOutdoorMessage, sendOutdoorSms, processOutdoorWifiExpiry, logOutdoorWifiSmsConfig, STATUSES, OUTDOOR_TEMPLATES } = require('./outdoor-wifi');
+const { createOutdoorPortalRouter } = require('./outdoor-wifi-portal');
 
 const app = express();
 const PORT = Number(process.env.PORT || 3000);
@@ -95,8 +96,13 @@ app.use(cors({ origin: (requestOrigin, callback) => {
   return callback(null, corsOrigins.includes(requestOrigin) ? requestOrigin : false);
 } }));
 app.use(express.json({ limit: '1mb' }));
+app.use('/api/outdoor-wifi/portal', createOutdoorPortalRouter({ db }));
 
 app.use(express.static(rootDir));
+
+app.get('/outdoor-wifi', (req, res) => {
+  res.sendFile(path.join(rootDir, 'outdoor-wifi.html'));
+});
 
 app.get('/', (req, res) => {
   res.sendFile(path.join(rootDir, 'login.html'));
