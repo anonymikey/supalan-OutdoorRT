@@ -293,7 +293,7 @@ body.modal-open {
 .quick-actions {
     display: grid;
 
-    grid-template-columns: 1fr 1fr;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
 
     gap: 11px;
 
@@ -302,6 +302,8 @@ body.modal-open {
 
 
 .quick-btn {
+    font: inherit;
+    text-decoration: none;
     border: 1px solid rgba(255,255,255,0.09);
 
     border-radius: 16px;
