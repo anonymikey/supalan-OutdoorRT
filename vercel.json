@@ -6,6 +6,14 @@
       "destination": "https://anonymikeconnect-mpw.onrender.com/api/:path*"
     },
     {
+      "source": "/outdoor-wifi",
+      "destination": "/outdoor-wifi.html"
+    },
+    {
+      "source": "/outdoor-wifi",
+      "destination": "/outdoor-wifi.html"
+    },
+    {
       "source": "/",
       "destination": "/login.html"
     }
