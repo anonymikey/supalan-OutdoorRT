@@ -99,6 +99,12 @@
     .btn-glass:hover { background: rgba(255,255,255,.09); }
     .details-card { padding: 22px; }
     .details-card h2 { margin-bottom: 18px; font-size: 17px; }
+    .renewal-status { margin-bottom: 18px; padding: 22px; border-color: #cbdcc9; background: #eef6ec; }
+    .renewal-status .eyebrow { color: #44705f; }
+    .renewal-status h2 { margin-bottom: 7px; font-size: 18px; }
+    .renewal-status p:not(.eyebrow) { margin-bottom: 0; color: var(--muted); font-size: 13px; line-height: 1.55; }
+    .renewal-status[data-state="error"], .renewal-status[data-state="failed"] { border-color: #e8b7ad; background: #fff3f0; }
+    .renewal-status[data-state="success"] { border-color: #bfdfbd; background: #edf8eb; }
     .detail-list { display: grid; gap: 15px; margin: 0; }
     .detail-row { display: flex; justify-content: space-between; gap: 14px; padding-bottom: 13px; border-bottom: 1px solid #edf1ed; }
     .detail-row:last-child { padding-bottom: 0; border-bottom: 0; }
@@ -115,7 +121,21 @@
     .package-card .btn { min-height: 41px; margin-top: auto; padding: 9px 12px; font-size: 12px; }
     .package-card .btn:disabled { border: 1px solid var(--line); background: #f4f6f3; color: #7a8884; opacity: 1; cursor: not-allowed; }
     .empty-plans { grid-column: 1/-1; padding: 24px; border: 1px dashed #bfd0c4; border-radius: 16px; color: var(--muted); text-align: center; }
-    .support-panel { display: flex; justify-content: space-between; align-items: center; gap: 20px; margin-top: 25px; padding: 22px 24px; border: 1px solid #d8e5d8; border-radius: 20px; background: #eaf3e9; }
+    .wifi-card { margin: 18px 0 24px; padding: 22px; }
+  .wifi-card-header { display: flex; justify-content: space-between; align-items: flex-start; gap: 14px; margin-bottom: 17px; }
+  .wifi-card-header h2 { margin-bottom: 0; }
+  .wifi-auth { padding: 7px 10px; border-radius: 999px; background: var(--mint); color: var(--forest); font-size: 11px; font-weight: 800; }
+  .wifi-values { display: grid; grid-template-columns: minmax(0, .8fr) minmax(0, 1.2fr); gap: 16px; }
+  .wifi-value { display: grid; min-width: 0; gap: 8px; }
+  .wifi-value label, .wifi-value > span { color: var(--muted); font-size: 12px; font-weight: 750; }
+  .wifi-value strong { overflow-wrap: anywhere; color: var(--ink); font-size: 16px; }
+  .wifi-key-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 9px; }
+  .wifi-key-row input { min-width: 0; min-height: 46px; padding: 11px 13px; border: 1px solid var(--line); border-radius: 11px; background: #f9fbf8; color: var(--ink); font-family: ui-monospace, SFMono-Regular, Menlo, monospace; letter-spacing: .04em; }
+  .wifi-actions { display: flex; gap: 8px; }
+  .wifi-actions .btn { width: auto; min-height: 44px; padding: 9px 12px; font-size: 12px; }
+  .wifi-unavailable { margin: 0; color: var(--muted); font-size: 13px; line-height: 1.6; }
+  .wifi-copy-status { margin: 10px 0 0; color: #3d6258; font-size: 12px; }
+  .support-panel { display: flex; justify-content: space-between; align-items: center; gap: 20px; margin-top: 25px; padding: 22px 24px; border: 1px solid #d8e5d8; border-radius: 20px; background: #eaf3e9; }
     .support-panel p { margin: 4px 0 0; color: var(--muted); font-size: 13px; }
     .support-actions { display: flex; gap: 9px; }
     .support-actions .btn { width: auto; min-height: 42px; padding: 9px 13px; font-size: 12px; }
@@ -143,6 +163,10 @@
       .hero-actions .btn { width: 100%; }
       .packages-grid { grid-template-columns: 1fr; }
       .package-card { min-height: 175px; }
+      .wifi-card { padding: 19px; }
+      .wifi-card-header { flex-direction: column; }
+      .wifi-values, .wifi-key-row { grid-template-columns: 1fr; }
+      .wifi-actions .btn { flex: 1; }
       .support-panel { align-items: flex-start; flex-direction: column; padding: 19px; }
       .support-actions { width: 100%; }
       .support-actions .btn { flex: 1; }
@@ -214,6 +238,13 @@
         <button class="btn btn-secondary signout" id="signOutButton" type="button">Sign out</button>
       </div>
 
+      <section class="card renewal-status" id="renewalStatus" data-state="pending" role="status" aria-live="polite" hidden>
+        <p class="eyebrow" id="renewalEyebrow">M-Pesa renewal</p>
+        <h2 id="renewalTitle">Renewal update</h2>
+        <p id="renewalMessage"></p>
+        <button class="text-button" id="checkRenewalAgain" type="button" hidden>Check payment status again</button>
+      </section>
+
       <div class="dashboard-grid">
         <section class="card hero-plan" aria-labelledby="currentPlanHeading">
           <div class="plan-row">
@@ -248,10 +279,34 @@
         </section>
       </div>
 
-      <section aria-labelledby="availablePackages">
+      <section class="card wifi-card" id="wifiCard" aria-labelledby="wifiHeading">
+    <div class="wifi-card-header">
+      <div><p class="eyebrow">Your connection</p><h2 id="wifiHeading">Current Wi-Fi details</h2></div>
+      <span class="wifi-auth" id="wifiAuthentication">WPA2/WPA3-PSK</span>
+    </div>
+    <div id="wifiDetails" hidden>
+      <div class="wifi-values">
+        <div class="wifi-value"><span>Wi-Fi name</span><strong id="wifiSsid">—</strong></div>
+        <div class="wifi-value">
+          <label for="wifiPassword">Security key</label>
+          <div class="wifi-key-row">
+            <input id="wifiPassword" type="password" readonly autocomplete="off" spellcheck="false" aria-label="Wi-Fi security key">
+            <div class="wifi-actions">
+              <button class="btn btn-secondary" id="toggleWifiPassword" type="button" aria-pressed="false">Show password</button>
+              <button class="btn btn-secondary" id="copyWifiPassword" type="button">Copy key</button>
+            </div>
+          </div>
+        </div>
+      </div>
+      <p class="wifi-copy-status" id="wifiCopyStatus" role="status" aria-live="polite"></p>
+    </div>
+    <p class="wifi-unavailable" id="wifiUnavailable" role="status" aria-live="polite">Wi-Fi details are not available for this subscription.</p>
+  </section>
+
+  <section aria-labelledby="availablePackages">
         <div class="section-heading">
           <div><p class="eyebrow">Stay connected</p><h2 id="availablePackages">Available packages</h2></div>
-          <p>Choose a plan, then message our team to renew.</p>
+          <p>Select a plan and approve the M-Pesa prompt on your registered phone.</p>
         </div>
         <div class="packages-grid" id="packagesGrid" aria-live="polite"></div>
       </section>
@@ -278,16 +333,21 @@
       let countdownTimer = null;
       let resendTimer = null;
       let resendRemaining = 0;
+      let sessionToken = '';
+      let activeRenewalOrderId = '';
+      let renewalTimer = null;
+      let renewalPollAttempt = 0;
+      let renewalIsBusy = false;
 
       function setNotice(target, message, isError = false) {
         target.textContent = message;
         target.classList.toggle('error', isError);
       }
 
-      async function postJson(path, payload) {
+      async function postJson(path, payload, extraHeaders = {}) {
         const response = await fetch(path, {
           method: 'POST',
-          headers: { 'content-type': 'application/json' },
+          headers: { 'content-type': 'application/json', ...extraHeaders },
           body: JSON.stringify(payload),
           cache: 'no-store',
         });
@@ -355,6 +415,7 @@
             phone: registeredPhone,
             code: $('codeInput').value.trim(),
           });
+          sessionToken = portalData.sessionToken || '';
           renderPortal(portalData);
         } catch (error) {
           setNotice($('codeNotice'), error.message, true);
@@ -383,12 +444,21 @@
       $('signOutButton').addEventListener('click', () => {
         clearInterval(countdownTimer);
         clearInterval(resendTimer);
+        clearTimeout(renewalTimer);
+        sessionToken = '';
+        activeRenewalOrderId = '';
+        renewalIsBusy = false;
         portalData = null;
         registeredPhone = '';
         $('dashboard').hidden = true;
         $('phoneStep').hidden = false;
         $('phoneForm').reset();
         $('codeForm').reset();
+        $('wifiPassword').value = '';
+        $('wifiSsid').textContent = '';
+        $('wifiDetails').hidden = true;
+        $('wifiUnavailable').textContent = 'Wi-Fi details are not available for this subscription.';
+        $('wifiCopyStatus').textContent = '';
         setNotice($('phoneNotice'), '');
         $('phoneInput').focus();
         window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -458,25 +528,144 @@
           const data = document.createElement('p');
           data.className = 'package-data';
           data.textContent = [plan.data, plan.bandwidth].filter(Boolean).join(' · ') || 'Outdoor Wi-Fi access';
-          const renew = document.createElement('a');
+          const renew = document.createElement('button');
+          renew.type = 'button';
           renew.className = 'btn btn-secondary';
-          renew.textContent = plan.available ? 'Ask to renew this plan' : 'Currently unavailable';
-          renew.href = `https://wa.me/254113313240?text=${encodeURIComponent(`Hello SUPA LAN, I’d like to renew with the ${plan.name} package.`)}`;
-          renew.target = '_blank';
-          renew.rel = 'noopener noreferrer';
-          renew.setAttribute('aria-label', `${plan.available ? 'Ask to renew' : 'Unavailable'}: ${plan.name}`);
-          if (!plan.available) {
-            renew.removeAttribute('href');
-            renew.removeAttribute('target');
-            renew.removeAttribute('rel');
-            renew.setAttribute('aria-disabled', 'true');
-            renew.tabIndex = -1;
-            renew.style.pointerEvents = 'none';
-          }
+          renew.textContent = plan.available ? 'Pay with M-Pesa' : 'Currently unavailable';
+          renew.disabled = !plan.available;
+          renew.dataset.planRenew = 'true';
+          renew.dataset.available = String(Boolean(plan.available));
+          renew.setAttribute('aria-label', `${plan.available ? 'Pay with M-Pesa for' : 'Unavailable'}: ${plan.name}`);
+          renew.addEventListener('click', () => startRenewal(plan));
           card.append(title, duration, price, data, renew);
           grid.append(card);
         }
       }
+
+      function setRenewalButtonsDisabled(disabled) {
+        document.querySelectorAll('[data-plan-renew]').forEach((button) => {
+          button.disabled = disabled || button.dataset.available !== 'true';
+        });
+      }
+
+      function showRenewalStatus(state, title, message, canRetry = false) {
+        const panel = $('renewalStatus');
+        panel.hidden = false;
+        panel.dataset.state = state;
+        $('renewalTitle').textContent = title;
+        $('renewalMessage').textContent = message;
+        $('checkRenewalAgain').hidden = !canRetry;
+      }
+
+      async function startRenewal(plan) {
+        if (!sessionToken || !plan.available || renewalIsBusy || activeRenewalOrderId) return;
+        renewalIsBusy = true;
+        setRenewalButtonsDisabled(true);
+        showRenewalStatus('pending', 'Starting your M-Pesa payment', 'We’re sending a secure payment prompt to your registered phone.');
+        try {
+          const result = await postJson('/api/outdoor-wifi/portal/renewals/start', { packageId: plan.id }, {
+            Authorization: `Bearer ${sessionToken}`,
+          });
+          if (!result.orderId) throw new Error('We could not start this renewal. Please try again.');
+          activeRenewalOrderId = result.orderId;
+          renewalPollAttempt = 0;
+          showRenewalStatus('pending', 'Approve your M-Pesa request', `A KES ${formatKes(result.amount)} prompt for ${result.packageName || plan.name} has been sent. Enter your M-Pesa PIN to continue.`);
+          clearTimeout(renewalTimer);
+          renewalTimer = setTimeout(() => pollRenewal(activeRenewalOrderId, 0), 5000);
+        } catch (error) {
+          activeRenewalOrderId = '';
+          setRenewalButtonsDisabled(false);
+          showRenewalStatus('error', 'We couldn’t start the renewal', error.message);
+        } finally {
+          renewalIsBusy = false;
+        }
+      }
+
+      async function pollRenewal(orderId, attempt) {
+        if (!sessionToken || !orderId) return;
+        try {
+          const result = await postJson('/api/outdoor-wifi/portal/renewals/status', { orderId }, {
+            Authorization: `Bearer ${sessionToken}`,
+          });
+          if (result.status === 'completed') {
+            activeRenewalOrderId = '';
+            setRenewalButtonsDisabled(false);
+            if (result.subscriber && portalData) portalData = { ...portalData, subscriber: result.subscriber, pendingRenewal: null };
+            renderPortal(portalData);
+            const receipt = result.receipt ? ` M-Pesa receipt: ${result.receipt}.` : '';
+            showRenewalStatus('success', 'Payment confirmed', `Your ${portalData?.subscriber?.packageName || 'Outdoor Wi-Fi'} package is renewed.${receipt}`);
+            return;
+          }
+          if (result.status === 'failed' || result.status === 'cancelled') {
+            activeRenewalOrderId = '';
+            setRenewalButtonsDisabled(false);
+            showRenewalStatus('failed', result.status === 'cancelled' ? 'Payment cancelled' : 'Payment failed', result.status === 'cancelled' ? 'The M-Pesa prompt was cancelled. You can try another package when ready.' : 'M-Pesa did not complete this payment. You can try again or contact support.');
+            return;
+          }
+          if (attempt >= 23) {
+            showRenewalStatus('pending', 'Payment is still pending', 'No renewal has been applied yet. Check the payment again, or sign in later to resume this request.', true);
+            return;
+          }
+          showRenewalStatus('pending', result.status === 'initiating' ? 'Preparing your M-Pesa prompt' : 'Waiting for M-Pesa confirmation', result.status === 'initiating' ? 'Your payment request is still being prepared.' : 'Approve the prompt on your phone. We’ll keep checking for up to two minutes.');
+          renewalPollAttempt = attempt + 1;
+          renewalTimer = setTimeout(() => pollRenewal(orderId, attempt + 1), 5000);
+        } catch (error) {
+          if (attempt >= 23) {
+            showRenewalStatus('error', 'We couldn’t verify the payment yet', `${error.message} Check again shortly; your package was not changed.`, true);
+            return;
+          }
+          showRenewalStatus('pending', 'Rechecking payment status', 'We couldn’t reach the payment status service yet. We’ll retry shortly.');
+          renewalPollAttempt = attempt + 1;
+          renewalTimer = setTimeout(() => pollRenewal(orderId, attempt + 1), 5000);
+        }
+      }
+
+      $('checkRenewalAgain').addEventListener('click', () => {
+        if (!activeRenewalOrderId || !sessionToken) return;
+        clearTimeout(renewalTimer);
+        renewalPollAttempt = 0;
+        showRenewalStatus('pending', 'Checking M-Pesa status', 'We’re checking the payment again.');
+        pollRenewal(activeRenewalOrderId, 0);
+      });
+
+      function renderWifiDetails(wifi) {
+        const password = $('wifiPassword');
+        $('wifiCopyStatus').textContent = '';
+        if (!wifi?.available) {
+          password.value = '';
+          $('wifiSsid').textContent = '';
+          $('wifiDetails').hidden = true;
+          $('wifiUnavailable').hidden = false;
+          $('wifiUnavailable').textContent = wifi?.message || 'Wi-Fi details are not available for this subscription.';
+          return;
+        }
+        $('wifiSsid').textContent = wifi.ssid || '—';
+        $('wifiAuthentication').textContent = wifi.authentication || 'WPA2/WPA3-PSK';
+        password.value = wifi.password || '';
+        password.type = 'password';
+        $('toggleWifiPassword').textContent = 'Show password';
+        $('toggleWifiPassword').setAttribute('aria-pressed', 'false');
+        $('wifiDetails').hidden = false;
+        $('wifiUnavailable').hidden = true;
+      }
+
+      $('toggleWifiPassword').addEventListener('click', () => {
+        const password = $('wifiPassword');
+        const show = password.type === 'password';
+        password.type = show ? 'text' : 'password';
+        $('toggleWifiPassword').textContent = show ? 'Hide password' : 'Show password';
+        $('toggleWifiPassword').setAttribute('aria-pressed', String(show));
+      });
+
+      $('copyWifiPassword').addEventListener('click', async () => {
+        if (!$('wifiPassword').value) return;
+        try {
+          await navigator.clipboard.writeText($('wifiPassword').value);
+          $('wifiCopyStatus').textContent = 'Wi-Fi security key copied.';
+        } catch {
+          $('wifiCopyStatus').textContent = 'Copy is unavailable in this browser. Use Show password instead.';
+        }
+      });
 
       function renderPortal(data) {
         const subscriber = data.subscriber;
@@ -497,6 +686,21 @@
         $('supportWhatsApp').href = supportHref;
         $('heroSupportLink').href = supportHref;
         renderPackages(data.packages);
+        renderWifiDetails(data.wifi);
+        if (data.pendingRenewal?.orderId) {
+          activeRenewalOrderId = data.pendingRenewal.orderId;
+          setRenewalButtonsDisabled(true);
+          const starting = data.pendingRenewal.state === 'initiating';
+          showRenewalStatus('pending', starting ? 'Preparing your renewal' : 'M-Pesa payment pending', starting ? 'Your payment request is still being prepared.' : `A KES ${formatKes(data.pendingRenewal.amount)} payment for ${data.pendingRenewal.packageName} is awaiting confirmation.`);
+          clearTimeout(renewalTimer);
+          renewalTimer = setTimeout(() => pollRenewal(activeRenewalOrderId, 0), 5000);
+        } else {
+          activeRenewalOrderId = '';
+          clearTimeout(renewalTimer);
+          setRenewalButtonsDisabled(false);
+          $('renewalStatus').hidden = true;
+          $('checkRenewalAgain').hidden = true;
+        }
         $('authSection').hidden = true;
         $('dashboard').hidden = false;
         updateCountdown();
