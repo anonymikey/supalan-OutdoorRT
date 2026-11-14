@@ -84,7 +84,7 @@ function createRuntime() {
     if (query.startsWith('insert into orders')) {
       const [id, reference, packageId, amount, phone] = params;
       const plan = plans.find((item) => item.id === packageId);
-      orders.set(id, { id, reference, package_id: packageId, packageName: plan.name, duration: plan.duration, amount, phone, status: 'INITIATING', payment_provider: 'COURTNEYTECH', created_at: new Date(NOW).toISOString() });
+      orders.set(id, { id, reference, package_id: packageId, packageName: plan.name, duration: plan.duration, amount, phone, status: 'PENDING', payment_provider: 'COURTNEYTECH', created_at: new Date(NOW).toISOString() });
       return result([{ id }]);
     }
     if (query.startsWith('update outdoor_wifi_clients set order_id')) {
@@ -184,6 +184,7 @@ test('renewal only activates after CourtneyTech reports a matching completed pay
   const started = await startedResponse.json();
   assert.equal(startedResponse.status, 200);
   assert.equal(started.status, 'pending');
+  assert.equal(runtime.state.orders.get(started.orderId).status, 'PENDING');
   assert.equal(runtime.startedPayment.phone, '254712345678');
   assert.equal(runtime.startedPayment.amount, 150);
   assert.match(runtime.startedPayment.reference, /^OW[A-F0-9]{10}$/);
