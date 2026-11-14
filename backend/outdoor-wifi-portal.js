@@ -108,6 +108,16 @@ async function loadPortalData({ db, clientId, normalizePhone = normalizeKenyanPh
 
   const paidAt = client.linked_paid_at || client.previous_paid_at || null;
   const expiresAt = new Date(client.expected_expiry_at).getTime();
+  const subscriberStatus = getStatus(client, new Date(timestamp));
+  const wifiSsid = String(process.env.OUTDOOR_WIFI_SSID || '').trim();
+  const wifiPassword = String(process.env.OUTDOOR_WIFI_PASSWORD || '');
+  const wifiEligible = ['ACTIVE', 'EXPIRING_SOON'].includes(subscriberStatus);
+  const wifiAvailable = wifiEligible && Boolean(wifiSsid && wifiPassword);
+  const wifiMessage = !wifiEligible
+    ? 'Wi-Fi credentials are shown while your subscription is active. Renew your package or contact support.'
+    : wifiAvailable
+      ? ''
+      : 'Wi-Fi details are not configured on the service yet. Please contact support.';
   const packageResult = await db.query(
     `select p.id, p.name, p.price, p.duration, p.bandwidth, p.data,
             exists (
@@ -139,10 +149,17 @@ async function loadPortalData({ db, clientId, normalizePhone = normalizeKenyanPh
       activatedAt: client.activation_at,
       expiresAt: client.expected_expiry_at,
       remainingMs: Math.max(0, expiresAt - timestamp),
-      status: getStatus(client),
+      status: subscriberStatus,
     },
     packages: packageResult.rows,
     supportPhone: SUPPORT_PHONE,
+    wifi: {
+      available: wifiAvailable,
+      ssid: wifiAvailable ? wifiSsid : '',
+      authentication: String(process.env.OUTDOOR_WIFI_AUTHENTICATION || 'WPA2/WPA3-PSK'),
+      password: wifiAvailable ? wifiPassword : '',
+      message: wifiMessage,
+    },
     pendingRenewal,
   };
 }
@@ -439,7 +456,7 @@ function createOutdoorPortalRouter({
     try {
       const result = await db.query(
         `select o.id, o.reference, o.status, o.payment_provider, o.provider_checkout_id,
-                o.amount, o.phone, p.id as package_id, p.name as package_name, p.duration
+                o.amount, o.phone, o.mpesa_receipt, p.id as package_id, p.name as package_name, p.duration
          from outdoor_wifi_clients c
          join orders o on o.id = c.order_id
          join packages p on p.id = o.package_id
@@ -452,7 +469,7 @@ function createOutdoorPortalRouter({
       const localStatus = String(order.status || '').toUpperCase();
       if (localStatus === 'PAID') {
         const portalData = await loadPortalData({ db, clientId: req.portalSession.clientId, normalizePhone, getStatus, timestamp: now() });
-        return res.json({ status: 'completed', subscriber: portalData?.subscriber || null });
+        return res.json({ status: 'completed', receipt: order.mpesa_receipt, ...(portalData || {}) });
       }
       if (localStatus === 'FAILED' || localStatus === 'CANCELLED') {
         return res.json({ status: localStatus.toLowerCase() });
@@ -547,7 +564,7 @@ function createOutdoorPortalRouter({
       }
 
       const portalData = await loadPortalData({ db, clientId: req.portalSession.clientId, normalizePhone, getStatus, timestamp: now() });
-      return res.json({ status: 'completed', receipt: provider.receipt, alreadyPaid, subscriber: portalData?.subscriber || null });
+      return res.json({ status: 'completed', receipt: provider.receipt, alreadyPaid, ...(portalData || {}) });
     } catch (error) {
       console.error('[OUTDOOR_PORTAL_RENEWAL] Status check failed:', error.code || 'provider-or-database-error');
       return res.status(error.statusCode || 502).json({
@@ -560,4 +577,4 @@ function createOutdoorPortalRouter({
   return router;
 }
 
-module.exports = { createOutdoorPortalRouter, phoneVariants, packageDurationMs };
+module.exports = { createOutdoorPortalRouter, loadPortalData, phoneVariants, packageDurationMs };
