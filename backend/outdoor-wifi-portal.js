@@ -544,13 +544,13 @@ function createOutdoorPortalRouter({
           const updated = await connection.query(
             `update outdoor_wifi_clients
              set package_id=$2, package_name=$3, package_price=$4,
-                 activation_at=$5, expected_expiry_at=$6,
+                 activation_at=$5, expected_expiry_at=$6, order_reference=$8,
                  status=case when blacklist_enabled then 'BLACKLISTED' else 'ACTIVE' end,
                  action_required_at=case when blacklist_enabled then action_required_at else null end,
                  updated_at=now()
              where id=$1 and order_id=$7
              returning id`,
-            [req.portalSession.clientId, order.package_id, order.package_name, order.amount, new Date(activationTime).toISOString(), expiresAt.toISOString(), order.id]
+            [req.portalSession.clientId, order.package_id, order.package_name, order.amount, new Date(activationTime).toISOString(), expiresAt.toISOString(), order.id, order.reference]
           );
           if (!updated.rowCount) throw new Error('Subscriber record changed before renewal activation.');
           await connection.query('commit');

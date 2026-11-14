@@ -21,6 +21,7 @@ function createRuntime() {
     blacklist_enabled: false,
     created_at: new Date(NOW - 7 * 86400000).toISOString(),
     order_id: null,
+    order_reference: 'previous-ref',
   };
   const plans = [{ id: 'week', name: 'Weekly Unlimited', price: 150, duration: '7 days', bandwidth: 'unlimited', data: 'Unlimited', available: true }];
   const orders = new Map();
@@ -104,7 +105,7 @@ function createRuntime() {
     if (query.startsWith('update outdoor_wifi_clients set package_id')) {
       Object.assign(subscriber, {
         package_id: params[1], package_name: params[2], package_price: params[3],
-        activation_at: params[4], expected_expiry_at: params[5], status: 'ACTIVE', order_id: params[6],
+        activation_at: params[4], expected_expiry_at: params[5], status: 'ACTIVE', order_id: params[6], order_reference: params[7],
       });
       return result([{ id: subscriber.id }]);
     }
@@ -206,5 +207,6 @@ test('renewal only activates after CourtneyTech reports a matching completed pay
   assert.equal(completed.status, 'completed');
   assert.equal(completed.subscriber.packageName, 'Weekly Unlimited');
   assert.equal(runtime.state.subscriber.package_name, 'Weekly Unlimited');
+  assert.equal(runtime.state.subscriber.order_reference, runtime.state.orders.get(started.orderId).reference);
   assert.equal(runtime.state.orders.get(started.orderId).mpesa_receipt, 'QJK1234567');
 });

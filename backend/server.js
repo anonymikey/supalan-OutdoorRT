@@ -119,7 +119,7 @@ app.get('/admin/outdoor-wifi', (req, res) => {
 app.get('/api/admin/outdoor-wifi/clients', requireAdmin, async (req, res) => {
   try {
     await processOutdoorWifiExpiry(db);
-    const result = await db.query(`select c.*, e.status as action_event_status, e.error_message as action_event_error from outdoor_wifi_clients c left join outdoor_wifi_action_events e on e.client_id=c.id and e.event_type='ACTION_REQUIRED' where c.status <> 'CANCELLED' order by c.expected_expiry_at asc`);
+    const result = await db.query(`select c.*, e.status as action_event_status, e.error_message as action_event_error, o.reference as renewal_reference, o.payment_provider as renewal_payment_provider, o.status as renewal_payment_status, o.paid_at as renewal_paid_at, o.mpesa_receipt as renewal_mpesa_receipt from outdoor_wifi_clients c left join outdoor_wifi_action_events e on e.client_id=c.id and e.event_type='ACTION_REQUIRED' left join orders o on o.id=c.order_id where c.status <> 'CANCELLED' order by c.expected_expiry_at asc`);
     const clients = result.rows.map((row) => ({ ...row, status: deriveStatus(row) }));
     const filter = String(req.query.status || '').toUpperCase();
     const search = String(req.query.search || '').trim().toLowerCase();
