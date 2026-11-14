@@ -524,11 +524,8 @@ function newBadgeFor(pkg)
 
 function showOffersPopup(packages)
 {
-    var modal = document.getElementById('offersModal');
-    var list = document.getElementById('offersList');
-    if (!modal || !list || packageDiscoverySessionShown) return;
-    var offers = packages.filter(function(pkg) { return newPackageIds[pkg.id]; });
-    list.innerHTML = offers.map(function(pkg) { return '<li><span aria-hidden="true">✦</span><span>' + escapePackageText(pkg.name) + ' — <strong>KSh ' + escapePackageText(pkg.price) + '</strong></span></li>'; }).join('');
+  var modal = document.getElementById('offersModal');
+  if (!modal || packageDiscoverySessionShown) return;
     packageDiscoverySessionShown = true;
     packageDiscoveryLastFocus = document.activeElement;
     modal.style.display = 'flex';
@@ -1139,12 +1136,11 @@ $(document).ready(function()
     <section class="offers-modal">
       <button type="button" class="modal-close" aria-label="Close new offers" onclick="closeOffersPopup();">×</button>
       <div class="offers-sparkle" aria-hidden="true">✦</div>
-      <span class="eyebrow">NEW CUSTOMER OFFERS</span>
-      <h2 id="offersTitle">NEW SUPA LAN OFFERS</h2>
-      <p>We&apos;ve added new affordable unlimited packages. Explore what works for you.</p>
-      <ul id="offersList" class="offers-list"></ul>
-      <button type="button" id="offersExploreButton" class="offers-primary-button" onclick="closeOffersPopup(); document.getElementById('packages').scrollIntoView({behavior:'smooth', block:'start'});">Explore Packages</button>
-      <button type="button" class="offers-secondary-button" onclick="closeOffersPopup();">Maybe later</button>
+  <span class="eyebrow">A LITTLE MORE FREEDOM</span>
+  <h2 id="offersTitle">Stay connected.</h2>
+  <p class="offers-message">Simple access, made for your everyday moments.</p>
+  <button type="button" id="offersExploreButton" class="offers-primary-button" onclick="closeOffersPopup(); document.getElementById('packages').scrollIntoView({behavior:'smooth', block:'start'});">Let&apos;s go</button>
+  <button type="button" class="offers-secondary-button" onclick="closeOffersPopup();">Not now</button>
     </section>
   </div>
 
