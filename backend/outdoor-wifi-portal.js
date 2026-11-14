@@ -400,7 +400,7 @@ function createOutdoorPortalRouter({
       const reference = `OW${crypto.randomBytes(5).toString('hex').toUpperCase()}`;
       await connection.query(
         `insert into orders (id, reference, package_id, amount, phone, status, payment_provider, created_at, updated_at)
-         values ($1,$2,$3,$4,$5,'INITIATING','COURTNEYTECH',now(),now())`,
+         values ($1,$2,$3,$4,$5,'PENDING','COURTNEYTECH',now(),now())`,
         [orderId, reference, plan.id, amount, phone]
       );
       await connection.query('update outdoor_wifi_clients set order_id=$2, updated_at=now() where id=$1', [client.id, orderId]);
@@ -409,7 +409,12 @@ function createOutdoorPortalRouter({
       renewal = { orderId, reference, clientId: client.id, packageId: plan.id, packageName: plan.name, duration: plan.duration, amount, phone };
     } catch (error) {
       if (transactionOpen) await connection.query('rollback').catch(() => {});
-      console.error('[OUTDOOR_PORTAL_RENEWAL] Could not create payment order:', error.code || 'database-error');
+      console.error('[OUTDOOR_PORTAL_RENEWAL] Could not create payment order:', JSON.stringify({
+        code: error.code || 'database-error',
+        constraint: error.constraint || null,
+        table: error.table || null,
+        column: error.column || null,
+      }));
       return res.status(500).json({ error: 'RENEWAL_UNAVAILABLE', message: 'We could not start your renewal. Please try again shortly.' });
     } finally {
       connection.release();
@@ -438,7 +443,7 @@ function createOutdoorPortalRouter({
         amount: renewal.amount,
       });
     } catch (error) {
-      await db.query(`update orders set status='FAILED', updated_at=now() where id=$1 and status='INITIATING'`, [renewal.orderId]).catch(() => {});
+      await db.query(`update orders set status='FAILED', updated_at=now() where id=$1 and status='PENDING' and provider_checkout_id is null`, [renewal.orderId]).catch(() => {});
       console.error('[OUTDOOR_PORTAL_RENEWAL] CourtneyTech STK request failed:', error.code || 'provider-error');
       return res.status(error.statusCode || 502).json({
         error: error.code || 'PAYMENT_START_FAILED',
