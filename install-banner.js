@@ -2,70 +2,103 @@
   'use strict';
 
   var deferredPrompt = null;
-  var dismissalKey = 'supaLanInstallDismissedAt';
-  var dismissalCooldown = 7 * 24 * 60 * 60 * 1000;
+  var banner;
+  var bannerCopy;
+  var installButton;
 
   function isStandalone() {
     return window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true;
   }
 
-  function isHomePage() {
-    return document.body && document.body.getAttribute('data-supa-lan-home') === 'true';
+  function isInstallPage() {
+    return document.body && (
+      document.body.getAttribute('data-supa-lan-home') === 'true' ||
+      document.body.getAttribute('data-supa-lan-portal') === 'true'
+    );
   }
 
-  function wasRecentlyDismissed() {
-    try {
-      return Date.now() - Number(window.localStorage.getItem(dismissalKey) || 0) < dismissalCooldown;
-    } catch (error) {
-      return false;
-    }
+  function getInstallInstructions() {
+    var isAppleMobile = /iphone|ipad|ipod/i.test(window.navigator.userAgent) ||
+      (window.navigator.platform === 'MacIntel' && window.navigator.maxTouchPoints > 1);
+    return isAppleMobile
+      ? 'To install, tap Share in your browser, then choose “Add to Home Screen.”'
+      : 'To install, open your browser menu and choose “Install app” or “Add to Home screen.”';
   }
 
   function createBanner() {
-    var banner = document.createElement('aside');
+    banner = document.createElement('aside');
     banner.id = 'supa-lan-install-banner';
-    banner.hidden = true;
     banner.setAttribute('aria-label', 'Install SUPA LAN');
     banner.innerHTML = '<img class="supa-lan-install-icon" src="/icons/supalan-192.png" alt="SUPA LAN">' +
-      '<span class="supa-lan-install-copy">Install SUPA LAN for faster access</span>' +
-      '<button class="supa-lan-install-button" type="button">Install</button>' +
-      '<button class="supa-lan-install-close" type="button" aria-label="Dismiss install message">&times;</button>';
+      '<span class="supa-lan-install-copy" role="status" aria-live="polite">Save this portal to your home screen for quick access.</span>' +
+      '<button class="supa-lan-install-button" type="button">How to install</button>';
     document.body.prepend(banner);
 
-    banner.querySelector('.supa-lan-install-close').addEventListener('click', function () {
-      try { window.localStorage.setItem(dismissalKey, String(Date.now())); } catch (error) {}
-      banner.hidden = true;
-    });
-    banner.querySelector('.supa-lan-install-button').addEventListener('click', function () {
-      if (!deferredPrompt || isStandalone()) return;
-      var button = this;
-      button.disabled = true;
-      deferredPrompt.prompt();
-      deferredPrompt.userChoice.then(function () {
-        deferredPrompt = null;
+    bannerCopy = banner.querySelector('.supa-lan-install-copy');
+    installButton = banner.querySelector('.supa-lan-install-button');
+    installButton.addEventListener('click', async function () {
+      if (isStandalone()) {
         banner.hidden = true;
-      }).catch(function () {
-        button.disabled = false;
-      });
+        return;
+      }
+
+      if (!deferredPrompt) {
+        bannerCopy.textContent = getInstallInstructions();
+        return;
+      }
+
+      var promptEvent = deferredPrompt;
+      deferredPrompt = null;
+      installButton.disabled = true;
+      installButton.textContent = 'Waiting…';
+      try {
+        await promptEvent.prompt();
+        var choice = await promptEvent.userChoice;
+        if (choice.outcome === 'accepted') {
+          bannerCopy.textContent = 'Follow the browser prompt to finish installing SUPA LAN.';
+          installButton.textContent = 'Installing…';
+        } else {
+          bannerCopy.textContent = 'No problem. You can install later from your browser menu.';
+          installButton.textContent = 'How to install';
+        }
+      } catch (error) {
+        bannerCopy.textContent = getInstallInstructions();
+        installButton.textContent = 'How to install';
+      } finally {
+        installButton.disabled = false;
+      }
     });
+
     return banner;
   }
 
+  function hideWhenInstalled() {
+    if (isStandalone() && banner) banner.hidden = true;
+  }
+
   function start() {
-    if (!isHomePage()) return;
-    if ('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js', { scope: '/' }).catch(function () {});
+    if (!isInstallPage()) return;
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.register('/sw.js', { scope: '/' }).catch(function () {});
+    }
     if (isStandalone()) return;
-    var banner = createBanner();
+
+    createBanner();
     window.addEventListener('beforeinstallprompt', function (event) {
       event.preventDefault();
-      if (isStandalone() || wasRecentlyDismissed()) return;
+      if (isStandalone()) return;
       deferredPrompt = event;
+      bannerCopy.textContent = 'Install SUPA LAN for quick access to your subscription.';
+      installButton.textContent = 'Install';
       banner.hidden = false;
-    }, { once: false });
+    });
     window.addEventListener('appinstalled', function () {
       deferredPrompt = null;
-      banner.hidden = true;
+      if (banner) banner.hidden = true;
     });
+    var displayMode = window.matchMedia('(display-mode: standalone)');
+    if (displayMode.addEventListener) displayMode.addEventListener('change', hideWhenInstalled);
+    else if (displayMode.addListener) displayMode.addListener(hideWhenInstalled);
   }
 
   if (document.body) start();

@@ -1,6 +1,8 @@
-const CACHE_NAME = 'supa-lan-shell-v2';
+const CACHE_NAME = 'supa-lan-shell-v4';
 const APP_SHELL = [
   './login.html',
+  './outdoor-wifi.html',
+  './subscriber-portal.webmanifest',
   './style.css',
   './install-banner.css',
   './install-banner.js',

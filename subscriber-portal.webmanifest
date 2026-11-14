@@ -1,0 +1,26 @@
+{
+  "id": "/outdoor-wifi.html",
+  "name": "SUPA LAN Outdoor Subscriber Portal",
+  "short_name": "SUPA Outdoor",
+  "description": "Check your Outdoor Wi-Fi subscription and manage renewals.",
+  "start_url": "/outdoor-wifi.html",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#f4f7f2",
+  "theme_color": "#102b2a",
+  "prefer_related_applications": false,
+  "icons": [
+    {
+      "src": "/icons/supalan-192.png",
+      "sizes": "1024x1024",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/supalan-512.png",
+      "sizes": "1024x1024",
+      "type": "image/png",
+      "purpose": "any"
+    }
+  ]
+}

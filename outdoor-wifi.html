@@ -4,6 +4,12 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="theme-color" content="#102b2a">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="SUPA Outdoor">
+  <link rel="manifest" href="/subscriber-portal.webmanifest">
+  <link rel="apple-touch-icon" href="/icons/supalan-192.png">
+  <link rel="stylesheet" href="/install-banner.css">
+  <script src="/install-banner.js" defer></script>
   <meta name="description" content="Manage your SUPA LAN Outdoor Wi-Fi subscription, package time, renewals, and support.">
   <title>Outdoor Wi-Fi Portal · SUPA LAN</title>
   <style>
@@ -176,7 +182,7 @@
     @media (prefers-reduced-motion: reduce) { *, *::before, *::after { scroll-behavior: auto !important; transition-duration: .01ms !important; } }
   </style>
 </head>
-<body>
+<body data-supa-lan-portal="true">
   <header class="site-header">
     <a class="brand" href="/" aria-label="SUPA LAN home">
       <span class="brand-mark" aria-hidden="true">SL</span>
