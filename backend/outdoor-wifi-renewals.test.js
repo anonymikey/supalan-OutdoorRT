@@ -175,10 +175,12 @@ test('renewal only activates after CourtneyTech reports a matching completed pay
   });
   const verified = await verifiedResponse.json();
   assert.equal(verifiedResponse.status, 200);
+  assert.equal(verified.sessionToken, undefined);
+  const sessionCookie = verifiedResponse.headers.get('set-cookie').split(';')[0];
 
   const startedResponse = await fetch(`${base}/api/outdoor-wifi/portal/renewals/start`, {
     method: 'POST',
-    headers: { 'content-type': 'application/json', authorization: `Bearer ${verified.sessionToken}` },
+    headers: { 'content-type': 'application/json', cookie: sessionCookie },
     body: JSON.stringify({ packageId: 'week' }),
   });
   const started = await startedResponse.json();
@@ -191,7 +193,7 @@ test('renewal only activates after CourtneyTech reports a matching completed pay
 
   const pendingResponse = await fetch(`${base}/api/outdoor-wifi/portal/renewals/status`, {
     method: 'POST',
-    headers: { 'content-type': 'application/json', authorization: `Bearer ${verified.sessionToken}` },
+    headers: { 'content-type': 'application/json', cookie: sessionCookie },
     body: JSON.stringify({ orderId: started.orderId }),
   });
   assert.equal((await pendingResponse.json()).status, 'pending');
@@ -200,7 +202,7 @@ test('renewal only activates after CourtneyTech reports a matching completed pay
   runtime.providerStatus = 'completed';
   const completedResponse = await fetch(`${base}/api/outdoor-wifi/portal/renewals/status`, {
     method: 'POST',
-    headers: { 'content-type': 'application/json', authorization: `Bearer ${verified.sessionToken}` },
+    headers: { 'content-type': 'application/json', cookie: sessionCookie },
     body: JSON.stringify({ orderId: started.orderId }),
   });
   const completed = await completedResponse.json();

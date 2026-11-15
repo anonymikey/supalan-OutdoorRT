@@ -111,6 +111,72 @@
     .renewal-status p:not(.eyebrow) { margin-bottom: 0; color: var(--muted); font-size: 13px; line-height: 1.55; }
     .renewal-status[data-state="error"], .renewal-status[data-state="failed"] { border-color: #e8b7ad; background: #fff3f0; }
     .renewal-status[data-state="success"] { border-color: #bfdfbd; background: #edf8eb; }
+    .renewal-dialog { width: min(510px, calc(100vw - 28px)); max-width: none; max-height: min(96vh, 760px); margin: auto; padding: 0; overflow: auto; border: 1px solid rgba(209, 224, 210, .92); border-radius: 26px; color: var(--ink); background: transparent; box-shadow: 0 35px 100px rgba(4, 25, 21, .34); }
+    .renewal-dialog::backdrop { background: rgba(7, 28, 25, .58); backdrop-filter: blur(7px); }
+    .renewal-dialog[open] .renewal-dialog-shell { animation: renewal-sheet-in .38s cubic-bezier(.2,.8,.2,1) both; }
+    .renewal-dialog-shell { position: relative; overflow: hidden; padding: 12px 22px; border-radius: inherit; background: linear-gradient(155deg, #fff 0%, #f8fbf6 58%, #eff7ee 100%); }
+    .renewal-dialog-shell::before, .renewal-dialog-shell::after { position: absolute; z-index: 0; border: 1px solid rgba(16, 59, 53, .08); border-radius: 50%; content: ""; pointer-events: none; }
+    .renewal-dialog-shell::before { top: -112px; right: -72px; width: 260px; height: 260px; }
+    .renewal-dialog-shell::after { top: -76px; right: -36px; width: 188px; height: 188px; }
+    .renewal-dialog-shell > * { position: relative; z-index: 1; }
+    .renewal-dialog-top { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 9px; }
+    .renewal-orbit { display: grid; place-items: center; width: 38px; height: 38px; border: 3px solid #d9e9d8; border-top-color: var(--forest); border-right-color: var(--leaf); border-radius: 50%; background: #f5faef; animation: renewal-spin .85s linear infinite; }
+    .renewal-orbit span { width: 12px; height: 12px; border-radius: 50%; background: var(--leaf); box-shadow: 0 0 0 5px rgba(188, 232, 107, .18); }
+    .renewal-dialog[data-state="success"] .renewal-orbit, .renewal-dialog[data-state="error"] .renewal-orbit, .renewal-dialog[data-state="failed"] .renewal-orbit { animation: none; border-color: #dcebd7; background: #edf8e8; }
+    .renewal-dialog[data-state="success"] .renewal-orbit::after { color: #2f694b; content: "✓"; font-size: 26px; font-weight: 850; }
+    .renewal-dialog[data-state="error"] .renewal-orbit, .renewal-dialog[data-state="failed"] .renewal-orbit { border-color: #f1d8d1; background: #fff0ec; }
+    .renewal-dialog[data-state="error"] .renewal-orbit::after, .renewal-dialog[data-state="failed"] .renewal-orbit::after { color: #a94337; content: "!"; font-size: 25px; font-weight: 850; }
+    .renewal-dialog-close { display: grid; place-items: center; width: 38px; height: 38px; border: 1px solid var(--line); border-radius: 50%; color: var(--forest); background: rgba(255,255,255,.82); cursor: pointer; font: inherit; font-size: 23px; line-height: 1; }
+    .renewal-dialog-close:hover { background: var(--mint); }
+    .renewal-dialog-close:focus-visible { outline: 3px solid #73a858; outline-offset: 3px; }
+    .renewal-dialog .eyebrow { margin-bottom: 8px; }
+    .renewal-dialog h2 { max-width: 390px; margin-bottom: 9px; font-size: clamp(23px, 5vw, 29px); line-height: 1.1; letter-spacing: -.045em; }
+    .renewal-dialog-message { margin-bottom: 12px; color: var(--muted); font-size: 14px; line-height: 1.5; }
+    .renewal-dialog-summary { display: flex; justify-content: space-between; align-items: center; gap: 16px; margin-bottom: 12px; padding: 10px 12px; border: 1px solid #dfe9dc; border-radius: 14px; background: rgba(255,255,255,.72); }
+    .renewal-dialog-summary div { display: grid; gap: 4px; min-width: 0; }
+    .renewal-dialog-summary span { color: var(--muted); font-size: 10px; font-weight: 800; letter-spacing: .12em; text-transform: uppercase; }
+    .renewal-dialog-summary strong { overflow-wrap: anywhere; font-size: 13px; }
+    .renewal-dialog-summary .renewal-amount { color: var(--forest); font-size: 17px; white-space: nowrap; }
+    .renewal-progress-label { display: flex; justify-content: space-between; gap: 12px; margin-bottom: 7px; color: var(--muted); font-size: 11px; font-weight: 750; }
+    .renewal-progress { height: 6px; margin-bottom: 11px; overflow: hidden; border-radius: 99px; background: #e2eadf; }
+    .renewal-progress-fill { display: block; width: 68%; height: 100%; border-radius: inherit; background: linear-gradient(90deg, #6eaa54, var(--leaf)); transition: width .42s ease, background .25s ease; }
+    .renewal-dialog[data-state="success"] .renewal-progress-fill { width: 100%; }
+    .renewal-dialog[data-state="error"] .renewal-progress-fill, .renewal-dialog[data-state="failed"] .renewal-progress-fill { background: #d48a78; }
+    .renewal-steps { display: grid; gap: 9px; margin: 0 0 10px; padding: 0; list-style: none; }
+    .renewal-step { display: flex; align-items: center; gap: 12px; min-height: 51px; padding: 9px 12px; border: 1px solid #e5ece2; border-radius: 13px; background: rgba(255,255,255,.58); transition: border-color .25s ease, background .25s ease, transform .25s ease; }
+    .renewal-step[data-state="active"] { transform: translateX(2px); border-color: #b8d99a; background: #f2f8e9; }
+    .renewal-step[data-state="error"] { border-color: #ebc6bd; background: #fff3f0; }
+    .renewal-step-marker { display: grid; place-items: center; flex: 0 0 29px; width: 29px; height: 29px; border-radius: 50%; color: #738279; background: #edf1eb; font-size: 11px; font-weight: 850; }
+    .renewal-step[data-state="complete"] .renewal-step-marker { color: #f7ffeb; background: var(--forest); }
+    .renewal-step[data-state="active"] .renewal-step-marker { color: #193227; background: var(--leaf); box-shadow: 0 0 0 4px rgba(188,232,107,.2); }
+    .renewal-step[data-state="error"] .renewal-step-marker { color: #fff; background: #a94337; }
+    .renewal-step-copy { display: grid; gap: 2px; }
+    .renewal-step-copy strong { font-size: 12px; }
+    .renewal-step-copy small { color: var(--muted); font-size: 11px; line-height: 1.35; }
+    .renewal-dialog-footer { display: flex; justify-content: space-between; align-items: center; gap: 14px; padding-top: 8px; border-top: 1px solid #e2e9df; }
+    .renewal-dialog-footer p { margin: 0; color: var(--muted); font-size: 11px; line-height: 1.45; }
+    @keyframes renewal-spin { to { transform: rotate(360deg); } }
+    @keyframes renewal-sheet-in { from { opacity: 0; transform: translateY(22px) scale(.96); } to { opacity: 1; transform: translateY(0) scale(1); } }
+    @media (min-width: 541px) {
+      .renewal-steps { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; }
+      .renewal-step { min-height: 88px; align-items: flex-start; flex-direction: column; gap: 6px; padding: 9px; }
+      .renewal-step[data-state="active"] { transform: translateY(-2px); }
+      .renewal-step-marker { flex: 0 0 25px; width: 25px; height: 25px; }
+      .renewal-step-copy strong { font-size: 11px; }
+      .renewal-step-copy small { font-size: 10px; }
+    }
+    @media (max-width: 540px) {
+      .renewal-dialog { width: calc(100vw - 22px); max-height: 94vh; border-radius: 21px; }
+      .renewal-dialog-shell { padding: 22px 19px; }
+      .renewal-dialog-summary { padding: 11px 12px; }
+      .renewal-dialog-footer { align-items: stretch; flex-direction: column; }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      .renewal-dialog[open] .renewal-dialog-shell { animation: none; }
+      .renewal-orbit { animation: none; }
+      .renewal-step, .renewal-progress-fill { transition: none; }
+      .renewal-step[data-state="active"] { transform: none; }
+    }
     .detail-list { display: grid; gap: 15px; margin: 0; }
     .detail-row { display: flex; justify-content: space-between; gap: 14px; padding-bottom: 13px; border-bottom: 1px solid #edf1ed; }
     .detail-row:last-child { padding-bottom: 0; border-bottom: 0; }
@@ -209,7 +275,7 @@
         <form id="phoneForm" novalidate>
           <label class="field-label" for="phoneInput">Registered mobile number</label>
           <input class="field" id="phoneInput" name="phone" type="tel" inputmode="tel" autocomplete="tel" placeholder="0712 345 678" required>
-          <p class="field-hint">Use the same number from your subscription. Standard SMS charges may apply.</p>
+          <p class="field-hint">Use the number on your subscription. Your session expires after 20 minutes without activity; refreshing renews it without another SMS.</p>
           <button class="btn" id="sendCodeButton" type="submit">Send verification code</button>
         </form>
         <p class="notice" id="phoneNotice" role="status" aria-live="polite"></p>
@@ -327,6 +393,31 @@
     </section>
   </main>
 
+  <dialog class="renewal-dialog" id="renewalDialog" data-state="pending" aria-labelledby="renewalDialogTitle" aria-describedby="renewalDialogMessage">
+    <div class="renewal-dialog-shell">
+      <div class="renewal-dialog-top">
+        <div class="renewal-orbit" aria-hidden="true"><span></span></div>
+        <button class="renewal-dialog-close" id="closeRenewalDialog" type="button" aria-label="Continue in background">×</button>
+      </div>
+      <p class="eyebrow" id="renewalDialogEyebrow">M-Pesa renewal</p>
+      <h2 id="renewalDialogTitle">Starting your M-Pesa payment</h2>
+      <p class="renewal-dialog-message" id="renewalDialogMessage" role="status" aria-live="polite" aria-atomic="true">We’re sending a secure payment prompt to your registered phone.</p>
+      <div class="renewal-dialog-summary" id="renewalDialogSummary" hidden>
+        <div><span>Package</span><strong id="renewalDialogPlan">—</strong></div>
+        <div><span>Amount</span><strong class="renewal-amount" id="renewalDialogAmount">—</strong></div>
+      </div>
+      <div class="renewal-progress-label"><span id="renewalStepLabel">Step 2 of 3</span><span>Secure M-Pesa request</span></div>
+      <div class="renewal-progress" id="renewalProgress" role="progressbar" aria-label="Renewal progress" aria-valuemin="1" aria-valuemax="3" aria-valuenow="2"><span class="renewal-progress-fill" id="renewalProgressFill"></span></div>
+      <ol class="renewal-steps" id="renewalSteps" aria-label="Renewal steps">
+        <li class="renewal-step" data-state="complete"><span class="renewal-step-marker" aria-hidden="true">1</span><span class="renewal-step-copy"><strong>Package selected</strong><small>Your chosen plan is ready.</small></span></li>
+        <li class="renewal-step" data-state="active" aria-current="step"><span class="renewal-step-marker" aria-hidden="true">2</span><span class="renewal-step-copy"><strong>Approve on your phone</strong><small>Enter your M-Pesa PIN when prompted.</small></span></li>
+        <li class="renewal-step" data-state="waiting"><span class="renewal-step-marker" aria-hidden="true">3</span><span class="renewal-step-copy"><strong>Renewal confirmed</strong><small>Your package updates after payment confirmation.</small></span></li>
+      </ol>
+      <div class="renewal-dialog-footer">
+        <p>You can close this window; we’ll keep checking for payment confirmation.</p>
+      </div>
+    </div>
+  </dialog>
   <footer class="footer"><div class="footer-inner"><span>SUPA LAN · Outdoor Wi-Fi subscriber portal</span><span>For subscription help, call 0113 313 240.</span></div></footer>
 
   <script>
@@ -340,10 +431,12 @@
       let resendTimer = null;
       let resendRemaining = 0;
       let sessionToken = '';
+      let portalAuthenticated = false;
       let activeRenewalOrderId = '';
       let renewalTimer = null;
       let renewalPollAttempt = 0;
       let renewalIsBusy = false;
+      let renewalDialogDismissed = false;
 
       function setNotice(target, message, isError = false) {
         target.textContent = message;
@@ -353,6 +446,7 @@
       async function postJson(path, payload, extraHeaders = {}) {
         const response = await fetch(path, {
           method: 'POST',
+          credentials: 'same-origin',
           headers: { 'content-type': 'application/json', ...extraHeaders },
           body: JSON.stringify(payload),
           cache: 'no-store',
@@ -360,6 +454,21 @@
         const body = await response.json().catch(() => ({}));
         if (!response.ok) throw new Error(body.message || 'We couldn’t complete that request. Please try again.');
         return body;
+      }
+
+      async function getJson(path) {
+        const response = await fetch(path, { credentials: 'same-origin', cache: 'no-store' });
+        const body = await response.json().catch(() => ({}));
+        if (!response.ok) {
+          const error = new Error(body.message || 'We couldn’t restore your session.');
+          error.status = response.status;
+          throw error;
+        }
+        return body;
+      }
+
+      function portalSessionHeaders() {
+        return sessionToken ? { Authorization: `Bearer ${sessionToken}` } : {};
       }
 
       function setBusy(button, busy, label) {
@@ -422,6 +531,7 @@
             code: $('codeInput').value.trim(),
           });
           sessionToken = portalData.sessionToken || '';
+          portalAuthenticated = true;
           renderPortal(portalData);
         } catch (error) {
           setNotice($('codeNotice'), error.message, true);
@@ -447,11 +557,21 @@
         $('phoneInput').focus();
       });
 
-      $('signOutButton').addEventListener('click', () => {
+      $('signOutButton').addEventListener('click', async () => {
+        $('signOutButton').disabled = true;
+        await fetch('/api/outdoor-wifi/portal/sign-out', {
+          method: 'POST',
+          credentials: 'same-origin',
+          cache: 'no-store',
+        }).catch(() => {});
         clearInterval(countdownTimer);
         clearInterval(resendTimer);
         clearTimeout(renewalTimer);
+        if ($('renewalDialog').open) $('renewalDialog').close();
+        $('renewalStatus').hidden = true;
+        renewalDialogDismissed = false;
         sessionToken = '';
+        portalAuthenticated = false;
         activeRenewalOrderId = '';
         renewalIsBusy = false;
         portalData = null;
@@ -466,6 +586,7 @@
         $('wifiUnavailable').textContent = 'Wi-Fi details are not available for this subscription.';
         $('wifiCopyStatus').textContent = '';
         setNotice($('phoneNotice'), '');
+        $('signOutButton').disabled = false;
         $('phoneInput').focus();
         window.scrollTo({ top: 0, behavior: 'smooth' });
       });
@@ -554,27 +675,66 @@
         });
       }
 
+      function setRenewalDialogSummary(packageName, amount) {
+        const summary = $('renewalDialogSummary');
+        if (!packageName) {
+          summary.hidden = true;
+          return;
+        }
+        $('renewalDialogPlan').textContent = packageName;
+        $('renewalDialogAmount').textContent = amount == null ? '—' : `KES ${formatKes(amount)}`;
+        summary.hidden = false;
+      }
+
+      function updateRenewalDialogProgress(state) {
+        const steps = [...$('renewalSteps').querySelectorAll('.renewal-step')];
+        const isTerminalSuccess = state === 'success';
+        const isError = state === 'error' || state === 'failed';
+        steps.forEach((step, index) => {
+          let stepState = 'waiting';
+          if (isTerminalSuccess || index === 0) stepState = 'complete';
+          else if (index === 1) stepState = isError ? 'error' : 'active';
+          step.dataset.state = stepState;
+          if (stepState === 'active') step.setAttribute('aria-current', 'step');
+          else step.removeAttribute('aria-current');
+        });
+        const value = isTerminalSuccess ? 3 : 2;
+        $('renewalProgress').setAttribute('aria-valuenow', String(value));
+        $('renewalProgressFill').style.width = isTerminalSuccess ? '100%' : '68%';
+        $('renewalStepLabel').textContent = isTerminalSuccess ? 'Payment complete' : isError ? 'Payment needs attention' : 'Step 2 of 3';
+      }
+
       function showRenewalStatus(state, title, message, canRetry = false) {
         const panel = $('renewalStatus');
-        panel.hidden = false;
+        const dialog = $('renewalDialog');
         panel.dataset.state = state;
         $('renewalTitle').textContent = title;
         $('renewalMessage').textContent = message;
         $('checkRenewalAgain').hidden = !canRetry;
+        dialog.dataset.state = state;
+        $('renewalDialogEyebrow').textContent = state === 'success' ? 'Renewal complete' : state === 'error' || state === 'failed' ? 'Payment update' : 'M-Pesa renewal';
+        $('renewalDialogTitle').textContent = title;
+        $('renewalDialogMessage').textContent = message;
+        updateRenewalDialogProgress(state);
+        const closeLabel = state === 'pending' ? 'Continue in background' : 'Close';
+        $('closeRenewalDialog').setAttribute('aria-label', closeLabel);
+        if (!renewalDialogDismissed && !dialog.open) dialog.showModal();
+        panel.hidden = dialog.open;
       }
 
       async function startRenewal(plan) {
-        if (!sessionToken || !plan.available || renewalIsBusy || activeRenewalOrderId) return;
+        if (!portalAuthenticated || !plan.available || renewalIsBusy || activeRenewalOrderId) return;
         renewalIsBusy = true;
+        renewalDialogDismissed = false;
+        setRenewalDialogSummary(plan.name, plan.price);
         setRenewalButtonsDisabled(true);
         showRenewalStatus('pending', 'Starting your M-Pesa payment', 'We’re sending a secure payment prompt to your registered phone.');
         try {
-          const result = await postJson('/api/outdoor-wifi/portal/renewals/start', { packageId: plan.id }, {
-            Authorization: `Bearer ${sessionToken}`,
-          });
+          const result = await postJson('/api/outdoor-wifi/portal/renewals/start', { packageId: plan.id }, portalSessionHeaders());
           if (!result.orderId) throw new Error('We could not start this renewal. Please try again.');
           activeRenewalOrderId = result.orderId;
           renewalPollAttempt = 0;
+          setRenewalDialogSummary(result.packageName || plan.name, result.amount);
           showRenewalStatus('pending', 'Approve your M-Pesa request', `A KES ${formatKes(result.amount)} prompt for ${result.packageName || plan.name} has been sent. Enter your M-Pesa PIN to continue.`);
           clearTimeout(renewalTimer);
           renewalTimer = setTimeout(() => pollRenewal(activeRenewalOrderId, 0), 5000);
@@ -588,11 +748,9 @@
       }
 
       async function pollRenewal(orderId, attempt) {
-        if (!sessionToken || !orderId) return;
+        if (!portalAuthenticated || !orderId) return;
         try {
-          const result = await postJson('/api/outdoor-wifi/portal/renewals/status', { orderId }, {
-            Authorization: `Bearer ${sessionToken}`,
-          });
+          const result = await postJson('/api/outdoor-wifi/portal/renewals/status', { orderId }, portalSessionHeaders());
           if (result.status === 'completed') {
             activeRenewalOrderId = '';
             setRenewalButtonsDisabled(false);
@@ -626,8 +784,14 @@
         }
       }
 
+      $('closeRenewalDialog').addEventListener('click', () => $('renewalDialog').close());
+      $('renewalDialog').addEventListener('close', () => {
+        renewalDialogDismissed = true;
+        $('renewalStatus').hidden = $('dashboard').hidden;
+      });
+
       $('checkRenewalAgain').addEventListener('click', () => {
-        if (!activeRenewalOrderId || !sessionToken) return;
+        if (!activeRenewalOrderId || !portalAuthenticated) return;
         clearTimeout(renewalTimer);
         renewalPollAttempt = 0;
         showRenewalStatus('pending', 'Checking M-Pesa status', 'We’re checking the payment again.');
@@ -697,6 +861,8 @@
           activeRenewalOrderId = data.pendingRenewal.orderId;
           setRenewalButtonsDisabled(true);
           const starting = data.pendingRenewal.state === 'initiating';
+          renewalDialogDismissed = false;
+          setRenewalDialogSummary(data.pendingRenewal.packageName, data.pendingRenewal.amount);
           showRenewalStatus('pending', starting ? 'Preparing your renewal' : 'M-Pesa payment pending', starting ? 'Your payment request is still being prepared.' : `A KES ${formatKes(data.pendingRenewal.amount)} payment for ${data.pendingRenewal.packageName} is awaiting confirmation.`);
           clearTimeout(renewalTimer);
           renewalTimer = setTimeout(() => pollRenewal(activeRenewalOrderId, 0), 5000);
@@ -715,6 +881,19 @@
         window.scrollTo({ top: 0, behavior: 'smooth' });
       }
 
+      async function restorePortalSession() {
+        try {
+          const data = await getJson('/api/outdoor-wifi/portal/session');
+          portalData = data;
+          sessionToken = data.sessionToken || '';
+          portalAuthenticated = true;
+          renderPortal(data);
+        } catch {
+          portalAuthenticated = false;
+          sessionToken = '';
+        }
+      }
+
       function updateCountdown() {
         if (!portalData) return;
         const remaining = Math.max(0, new Date(portalData.subscriber.expiresAt).getTime() - Date.now());
@@ -725,6 +904,8 @@
           $('expiryText').textContent = 'Your package has expired. Choose a renewal plan below to reconnect.';
         }
       }
+
+      restorePortalSession();
     })();
   </script>
 </body>

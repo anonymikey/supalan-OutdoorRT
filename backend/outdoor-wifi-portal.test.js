@@ -103,9 +103,34 @@ test('subscribers must verify an SMS code before viewing their own package', asy
   assert.equal(body.subscriber.purchaseTimeSource, 'payment');
   assert.equal(body.subscriber.phone, '+254712••••78');
   assert.equal(body.packages.length, 1);
-  assert.equal(typeof body.sessionToken, 'string');
+  assert.equal(body.sessionToken, undefined);
   assert.equal(JSON.stringify(body).includes('SECRET-CODE'), false);
   assert.equal(JSON.stringify(body).includes('AA:BB:CC:DD:EE:FF'), false);
+  const sessionCookieHeader = verified.headers.get('set-cookie');
+  assert.match(sessionCookieHeader, /HttpOnly/i);
+  assert.match(sessionCookieHeader, /Secure/i);
+  assert.match(sessionCookieHeader, /SameSite=Lax/i);
+  assert.match(sessionCookieHeader, /Max-Age=1200/i);
+  const sessionCookie = sessionCookieHeader.split(';')[0];
+
+  const restored = await fetch(`${base}/api/outdoor-wifi/portal/session`, {
+    headers: { cookie: sessionCookie },
+  });
+  assert.equal(restored.status, 200);
+  assert.equal((await restored.json()).subscriber.name, 'Maya Njeri');
+  assert.match(restored.headers.get('set-cookie'), /Max-Age=1200/i);
+
+  const cookieAuthorizedRenewal = await fetch(`${base}/api/outdoor-wifi/portal/renewals/start`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', cookie: sessionCookie },
+    body: JSON.stringify({ packageId: 'not valid!' }),
+  });
+  assert.equal(cookieAuthorizedRenewal.status, 400);
+  assert.equal((await cookieAuthorizedRenewal.json()).error, 'INVALID_PACKAGE');
+
+  const signedOut = await fetch(`${base}/api/outdoor-wifi/portal/sign-out`, { method: 'POST' });
+  assert.equal(signedOut.status, 204);
+  assert.match(signedOut.headers.get('set-cookie'), /Expires=Thu, 01 Jan 1970/i);
 
   const unauthorizedRenewal = await fetch(`${base}/api/outdoor-wifi/portal/renewals/start`, {
     method: 'POST',

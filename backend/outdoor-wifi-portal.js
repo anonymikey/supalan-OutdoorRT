@@ -9,6 +9,8 @@ const OTP_RESEND_MS = 60 * 1000;
 const OTP_MAX_REQUESTS_PER_HOUR = 4;
 const OTP_MAX_ATTEMPTS = 5;
 const PORTAL_SESSION_TTL_MS = 20 * 60 * 1000;
+const PORTAL_SESSION_COOKIE = 'supa_lan_portal_session';
+const PORTAL_SESSION_COOKIE_OPTIONS = { httpOnly: true, secure: true, sameSite: 'lax', path: '/' };
 const MAX_PAYMENT_AMOUNT_KES = 70000;
 const SUPPORT_PHONE = '0113313240';
 const COURTNEY_CALLBACK_URL = 'https://anonymikeconnect-mpw.onrender.com/api/webhooks/courtneytech';
@@ -46,6 +48,21 @@ function readPortalSessionToken(token, timestamp, secret = sessionSigningSecret)
   } catch {
     return null;
   }
+}
+
+function readPortalSessionCookie(req) {
+  const namePrefix = `${PORTAL_SESSION_COOKIE}=`;
+  const item = String(req.headers.cookie || '').split(';').map((part) => part.trim()).find((part) => part.startsWith(namePrefix));
+  return item ? item.slice(namePrefix.length) : '';
+}
+
+function setPortalSessionCookie(res, clientId, timestamp, secret) {
+  const token = createPortalSessionToken(clientId, timestamp, secret);
+  res.cookie(PORTAL_SESSION_COOKIE, token, { ...PORTAL_SESSION_COOKIE_OPTIONS, maxAge: PORTAL_SESSION_TTL_MS });
+}
+
+function clearPortalSessionCookie(res) {
+  res.clearCookie(PORTAL_SESSION_COOKIE, PORTAL_SESSION_COOKIE_OPTIONS);
 }
 
 function packageDurationMs(duration) {
@@ -179,10 +196,16 @@ function createOutdoorPortalRouter({
   const requestHistory = new Map();
 
   function requirePortalSession(req, res, next) {
-    const match = /^Bearer\s+(\S+)$/i.exec(req.get('authorization') || '');
-    const session = match ? readPortalSessionToken(match[1], now(), sessionSecret) : null;
-    if (!session) return res.status(401).json({ error: 'PORTAL_SESSION_EXPIRED', message: 'Your secure portal session expired. Verify your phone again.' });
-    req.portalSession = session;
+    const timestamp = now();
+    const bearerMatch = /^Bearer\s+(\S+)$/i.exec(req.get('authorization') || '');
+    const tokens = [bearerMatch?.[1], readPortalSessionCookie(req)].filter(Boolean);
+    const session = tokens.map((token) => readPortalSessionToken(token, timestamp, sessionSecret)).find(Boolean);
+    if (!session) {
+      clearPortalSessionCookie(res);
+      return res.status(401).json({ error: 'PORTAL_SESSION_EXPIRED', message: 'Your secure portal session expired. Verify your phone again.' });
+    }
+    setPortalSessionCookie(res, session.clientId, timestamp, sessionSecret);
+    req.portalSession = { ...session, expiresAt: timestamp + PORTAL_SESSION_TTL_MS };
     return next();
   }
 
@@ -298,14 +321,37 @@ function createOutdoorPortalRouter({
         timestamp,
       });
       if (!portalData) return res.status(400).json({ error: 'INVALID_CODE', message: 'The phone number or code is incorrect or expired.' });
-      return res.json({
-        ...portalData,
-        sessionToken: createPortalSessionToken(matchingClient.rows[0].id, timestamp, sessionSecret),
-      });
+      setPortalSessionCookie(res, matchingClient.rows[0].id, timestamp, sessionSecret);
+      return res.json(portalData);
     } catch (error) {
       console.error('[OUTDOOR_PORTAL] Subscriber details lookup failed:', error.code || 'database-error');
       return res.status(500).json({ error: 'PORTAL_UNAVAILABLE', message: 'We could not load your subscription right now. Please try again shortly.' });
     }
+  });
+
+  router.get('/session', requirePortalSession, async (req, res) => {
+    try {
+      const portalData = await loadPortalData({
+        db,
+        clientId: req.portalSession.clientId,
+        normalizePhone,
+        getStatus,
+        timestamp: now(),
+      });
+      if (!portalData) {
+        clearPortalSessionCookie(res);
+        return res.status(401).json({ error: 'PORTAL_SESSION_EXPIRED', message: 'Your secure portal session expired. Verify your phone again.' });
+      }
+      return res.json(portalData);
+    } catch (error) {
+      console.error('[OUTDOOR_PORTAL] Session restore failed:', error.code || 'database-error');
+      return res.status(500).json({ error: 'PORTAL_UNAVAILABLE', message: 'We could not restore your subscription right now.' });
+    }
+  });
+
+  router.post('/sign-out', (_req, res) => {
+    clearPortalSessionCookie(res);
+    return res.status(204).end();
   });
 
   router.post('/renewals/start', requirePortalSession, async (req, res) => {
