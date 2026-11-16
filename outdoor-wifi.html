@@ -435,6 +435,7 @@
       let activeRenewalOrderId = '';
       let activeRenewalPackageName = '';
       let activeRenewalAmount = null;
+      let activeRenewalRetryable = false;
       let renewalTimer = null;
       let renewalPollAttempt = 0;
       let renewalIsBusy = false;
@@ -453,7 +454,13 @@
           cache: 'no-store',
         });
         const body = await response.json().catch(() => ({}));
-        if (!response.ok) throw new Error(body.message || 'We couldn’t complete that request. Please try again.');
+        if (!response.ok) {
+          const error = new Error(body.message || 'We couldn’t complete that request. Please try again.');
+          error.code = body.error || '';
+          error.status = response.status;
+          error.body = body;
+          throw error;
+        }
         return body;
       }
 
@@ -575,6 +582,7 @@
         activeRenewalOrderId = '';
         activeRenewalPackageName = '';
         activeRenewalAmount = null;
+        activeRenewalRetryable = false;
         renewalIsBusy = false;
         portalData = null;
         registeredPhone = '';
@@ -660,12 +668,12 @@
           const renew = document.createElement('button');
           renew.type = 'button';
           renew.className = 'btn btn-secondary';
-          renew.textContent = plan.available ? activeRenewalOrderId ? 'Resume pending payment' : 'Pay with M-Pesa' : 'Currently unavailable';
+          renew.textContent = !plan.available ? 'Currently unavailable' : activeRenewalOrderId ? activeRenewalRetryable ? 'Retry payment' : 'Resume pending payment' : 'Pay with M-Pesa';
           renew.disabled = !plan.available;
           renew.dataset.planRenew = 'true';
           renew.dataset.available = String(Boolean(plan.available));
           renew.dataset.planName = plan.name;
-          renew.setAttribute('aria-label', activeRenewalOrderId ? 'Resume the pending M-Pesa payment' : `${plan.available ? 'Pay with M-Pesa for' : 'Unavailable'}: ${plan.name}`);
+          renew.setAttribute('aria-label', !plan.available ? `Unavailable: ${plan.name}` : activeRenewalOrderId ? activeRenewalRetryable ? 'Retry payment after confirming the previous request was not paid' : 'Resume the pending M-Pesa payment' : `Pay with M-Pesa for: ${plan.name}`);
           renew.addEventListener('click', () => startRenewal(plan));
           card.append(title, duration, price, data, renew);
           grid.append(card);
@@ -677,8 +685,8 @@
           const available = button.dataset.available === 'true';
           const hasPendingRenewal = Boolean(activeRenewalOrderId);
           button.disabled = disabled || !available;
-          button.textContent = !available ? 'Currently unavailable' : hasPendingRenewal ? 'Resume pending payment' : 'Pay with M-Pesa';
-          button.setAttribute('aria-label', hasPendingRenewal ? 'Resume the pending M-Pesa payment' : `${available ? 'Pay with M-Pesa for' : 'Unavailable'}: ${button.dataset.planName}`);
+          button.textContent = !available ? 'Currently unavailable' : !hasPendingRenewal ? 'Pay with M-Pesa' : activeRenewalRetryable ? 'Retry payment' : 'Resume pending payment';
+          button.setAttribute('aria-label', !available ? `Unavailable: ${button.dataset.planName}` : !hasPendingRenewal ? `Pay with M-Pesa for: ${button.dataset.planName}` : activeRenewalRetryable ? 'Retry payment after confirming the previous request was not paid' : 'Resume the pending M-Pesa payment');
         });
       }
 
@@ -731,14 +739,15 @@
 
       async function startRenewal(plan) {
         if (!portalAuthenticated || !plan.available || renewalIsBusy) return;
-        if (activeRenewalOrderId) {
+        const retryOrderId = activeRenewalRetryable ? activeRenewalOrderId : '';
+        if (activeRenewalOrderId && !retryOrderId) {
           renewalIsBusy = true;
           setRenewalButtonsDisabled(true);
           clearTimeout(renewalTimer);
           setRenewalDialogSummary(activeRenewalPackageName, activeRenewalAmount);
-          const amount = activeRenewalAmount == null ? '' : `A KES ${formatKes(activeRenewalAmount)} `;
+          const amount = activeRenewalAmount == null ? '' : `KES ${formatKes(activeRenewalAmount)} `;
           const packageName = activeRenewalPackageName || 'your selected package';
-          showRenewalStatus('pending', 'M-Pesa payment already pending', `${amount}request for ${packageName} is already active. Approve that prompt on your phone; no second request will be sent.`, false, true);
+          showRenewalStatus('pending', 'Payment already in progress', `A ${amount}request for ${packageName} is already being processed. We’ll check this request without creating another prompt.`, false, true);
           try {
             await pollRenewal(activeRenewalOrderId, 0);
           } finally {
@@ -748,16 +757,24 @@
           return;
         }
 
+        if (retryOrderId && !window.confirm('We could not confirm the previous M-Pesa request. Only retry if you did not approve it or make a payment. Starting again could otherwise charge you twice. Continue?')) return;
+
         renewalIsBusy = true;
         setRenewalDialogSummary(plan.name, plan.price);
         setRenewalButtonsDisabled(true);
-        showRenewalStatus('pending', 'Starting your M-Pesa payment', 'We’re sending a secure payment prompt to your registered phone.', false, true);
+        showRenewalStatus('pending', retryOrderId ? 'Starting a fresh M-Pesa request' : 'Starting your M-Pesa payment', 'We’re sending a secure payment prompt to your registered phone.', false, true);
         try {
-          const result = await postJson('/api/outdoor-wifi/portal/renewals/start', { packageId: plan.id }, portalSessionHeaders());
+          const payload = { packageId: plan.id };
+          if (retryOrderId) {
+            payload.confirmRetry = true;
+            payload.retryOrderId = retryOrderId;
+          }
+          const result = await postJson('/api/outdoor-wifi/portal/renewals/start', payload, portalSessionHeaders());
           if (!result.orderId) throw new Error('We could not start this renewal. Please try again.');
           activeRenewalOrderId = result.orderId;
           activeRenewalPackageName = result.packageName || plan.name;
           activeRenewalAmount = result.amount ?? plan.price;
+          activeRenewalRetryable = false;
           renewalPollAttempt = 0;
           setRenewalDialogSummary(activeRenewalPackageName, activeRenewalAmount);
           setRenewalButtonsDisabled(false);
@@ -765,13 +782,36 @@
           clearTimeout(renewalTimer);
           renewalTimer = setTimeout(() => pollRenewal(activeRenewalOrderId, 0), 5000);
         } catch (error) {
-          activeRenewalOrderId = '';
-          activeRenewalPackageName = '';
-          activeRenewalAmount = null;
-          setRenewalButtonsDisabled(false);
-          showRenewalStatus('error', 'We couldn’t start the renewal', error.message);
+          let sessionReloaded = false;
+          try {
+            const current = await getJson('/api/outdoor-wifi/portal/session');
+            portalData = current;
+            portalAuthenticated = true;
+            renderPortal(current);
+            sessionReloaded = true;
+          } catch {}
+          if (!sessionReloaded) {
+            if (retryOrderId) {
+              activeRenewalOrderId = retryOrderId;
+              activeRenewalRetryable = true;
+            } else {
+              activeRenewalOrderId = '';
+              activeRenewalPackageName = '';
+              activeRenewalAmount = null;
+              activeRenewalRetryable = false;
+            }
+            setRenewalButtonsDisabled(false);
+          }
+          if (activeRenewalOrderId && activeRenewalRetryable) {
+            showRenewalStatus('pending', 'M-Pesa request could not be confirmed', 'Only retry if you did not approve or pay the previous prompt. If you did, contact support before trying again.');
+          } else if (activeRenewalOrderId) {
+            showRenewalStatus('pending', 'Checking the existing M-Pesa request', 'We’ll verify this request before allowing another payment. No new prompt was started.');
+          } else {
+            showRenewalStatus('error', 'We couldn’t start the renewal', error.message);
+          }
         } finally {
           renewalIsBusy = false;
+          if (activeRenewalOrderId) setRenewalButtonsDisabled(false);
         }
       }
 
@@ -783,6 +823,7 @@
             activeRenewalOrderId = '';
             activeRenewalPackageName = '';
             activeRenewalAmount = null;
+        activeRenewalRetryable = false;
             setRenewalButtonsDisabled(false);
             if (result.subscriber && portalData) portalData = { ...portalData, subscriber: result.subscriber, pendingRenewal: null };
             renderPortal(portalData);
@@ -794,8 +835,15 @@
             activeRenewalOrderId = '';
             activeRenewalPackageName = '';
             activeRenewalAmount = null;
+            activeRenewalRetryable = false;
             setRenewalButtonsDisabled(false);
             showRenewalStatus('failed', result.status === 'cancelled' ? 'Payment cancelled' : 'Payment failed', result.status === 'cancelled' ? 'The M-Pesa prompt was cancelled. You can try another package when ready.' : 'M-Pesa did not complete this payment. You can try again or contact support.');
+            return;
+          }
+          if (result.status === 'retryable') {
+            activeRenewalRetryable = true;
+            setRenewalButtonsDisabled(false);
+            showRenewalStatus('pending', 'M-Pesa request could not be confirmed', 'No checkout reference was saved for the previous request. Only retry if you did not approve or pay it; otherwise contact support first.');
             return;
           }
           if (attempt >= 23) {
@@ -889,16 +937,25 @@
         activeRenewalOrderId = data.pendingRenewal?.orderId || '';
         activeRenewalPackageName = data.pendingRenewal?.packageName || '';
         activeRenewalAmount = data.pendingRenewal?.amount ?? null;
+        activeRenewalRetryable = Boolean(data.pendingRenewal?.retryAvailable || data.pendingRenewal?.state === 'retryable');
         renderPackages(data.packages);
         renderWifiDetails(data.wifi);
         if (activeRenewalOrderId) {
           setRenewalButtonsDisabled(false);
-          const starting = data.pendingRenewal.state === 'initiating';
           setRenewalDialogSummary(activeRenewalPackageName, activeRenewalAmount);
-          showRenewalStatus('pending', starting ? 'Preparing your renewal' : 'M-Pesa payment pending', starting ? 'Your payment request is still being prepared. Select “Resume pending payment” to open the payment steps.' : `A KES ${formatKes(activeRenewalAmount)} payment for ${activeRenewalPackageName} is awaiting confirmation. Select “Resume pending payment” to check it.`, true);
+          if (activeRenewalRetryable) {
+            showRenewalStatus('pending', 'M-Pesa request could not be confirmed', 'We could not confirm the previous request. Only retry if you did not approve or pay it. If you did, contact support before trying again.');
+          } else {
+            const starting = data.pendingRenewal.state === 'initiating';
+            const message = starting
+              ? 'Your payment request is still being prepared. Select “Resume pending payment” to open the payment steps.'
+              : `A KES ${formatKes(activeRenewalAmount)} payment for ${activeRenewalPackageName} is awaiting confirmation. Select “Resume pending payment” to check it.`;
+            showRenewalStatus('pending', starting ? 'Preparing your renewal' : 'M-Pesa payment pending', message, true);
+          }
           clearTimeout(renewalTimer);
           renewalTimer = setTimeout(() => pollRenewal(activeRenewalOrderId, 0), 5000);
         } else {
+          activeRenewalRetryable = false;
           clearTimeout(renewalTimer);
           setRenewalButtonsDisabled(false);
           $('renewalStatus').hidden = true;
