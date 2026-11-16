@@ -27,6 +27,7 @@ function createRuntime() {
   const orders = new Map();
   let providerStatus = 'pending';
   let startedPayment = null;
+  let startedPaymentCount = 0;
 
   function result(rows = []) {
     return { rows, rowCount: rows.length };
@@ -49,6 +50,7 @@ function createRuntime() {
         linked_payment_provider: linked.payment_provider || null,
         provider_checkout_id: linked.provider_checkout_id || null,
         linked_amount: linked.amount || null,
+        linked_order_created_at: linked.created_at || null,
         linked_package_name: linked.packageName || null,
       }]);
     }
@@ -63,6 +65,7 @@ function createRuntime() {
         linked_payment_provider: linked.payment_provider || null,
         linked_checkout_id: linked.provider_checkout_id || null,
         linked_amount: linked.amount || null,
+        linked_order_created_at: linked.created_at || null,
         linked_package_name: linked.packageName || null,
       }]);
     }
@@ -109,6 +112,13 @@ function createRuntime() {
       });
       return result([{ id: subscriber.id }]);
     }
+    if (query.startsWith("update orders set status='failed'") && query.includes('provider_checkout_id is null')) {
+      const order = orders.get(params[0]);
+      if (!order || !['PENDING', 'INITIATING'].includes(order.status) || order.provider_checkout_id) return result();
+      if (new Date(order.created_at).getTime() > new Date(params[1]).getTime()) return result();
+      order.status = 'FAILED';
+      return result([{ id: order.id }]);
+    }
     if (query.startsWith('update orders set status=$2')) {
       const order = orders.get(params[0]);
       if (order) order.status = params[1];
@@ -125,6 +135,7 @@ function createRuntime() {
     isConfigured: () => true,
     async startStk(request) {
       startedPayment = request;
+      startedPaymentCount += 1;
       return { checkoutRequestId: 'ws_CO_renewal123', merchantRequestId: 'merchant-1', transactionId: 'tx-1' };
     },
     async checkStatus() {
@@ -155,6 +166,7 @@ function createRuntime() {
   const server = app.listen(0);
   return {
     get startedPayment() { return startedPayment; },
+    get startedPaymentCount() { return startedPaymentCount; },
     set providerStatus(value) { providerStatus = value; },
     state: { subscriber, orders },
     url: new Promise((resolve) => server.once('listening', () => resolve(`http://127.0.0.1:${server.address().port}`))),
@@ -189,6 +201,7 @@ test('renewal only activates after CourtneyTech reports a matching completed pay
   assert.equal(runtime.state.orders.get(started.orderId).status, 'PENDING');
   assert.equal(runtime.startedPayment.phone, '254712345678');
   assert.equal(runtime.startedPayment.amount, 150);
+  assert.equal(runtime.state.orders.get(started.orderId).provider_checkout_id, 'ws_CO_renewal123');
   assert.match(runtime.startedPayment.reference, /^OW[A-F0-9]{10}$/);
 
   const pendingResponse = await fetch(`${base}/api/outdoor-wifi/portal/renewals/status`, {
@@ -212,4 +225,94 @@ test('renewal only activates after CourtneyTech reports a matching completed pay
   assert.equal(runtime.state.subscriber.package_name, 'Weekly Unlimited');
   assert.equal(runtime.state.subscriber.order_reference, runtime.state.orders.get(started.orderId).reference);
   assert.equal(runtime.state.orders.get(started.orderId).mpesa_receipt, 'QJK1234567');
+});
+
+test('stale untracked payments require explicit retry and never start duplicate orders', async (t) => {
+  const runtime = createRuntime();
+  t.after(runtime.close);
+  const staleOrderId = '123e4567-e89b-12d3-a456-426614174099';
+  runtime.state.orders.set(staleOrderId, {
+    id: staleOrderId,
+    reference: 'OWSTALE0001',
+    package_id: 'week',
+    packageName: 'Weekly Unlimited',
+    duration: '7 days',
+    amount: 150,
+    phone: '254712345678',
+    status: 'PENDING',
+    payment_provider: 'COURTNEYTECH',
+    provider_checkout_id: null,
+    created_at: new Date(NOW - 120_000).toISOString(),
+  });
+  runtime.state.subscriber.order_id = staleOrderId;
+  const base = await runtime.url;
+
+  await fetch(`${base}/api/outdoor-wifi/portal/request-code`, {
+    method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ phone: '0712345678' }),
+  });
+  const verifiedResponse = await fetch(`${base}/api/outdoor-wifi/portal/verify-code`, {
+    method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ phone: '0712345678', code: '036914' }),
+  });
+  const verified = await verifiedResponse.json();
+  const sessionCookie = verifiedResponse.headers.get('set-cookie').split(';')[0];
+  assert.equal(verified.pendingRenewal.state, 'retryable');
+
+  const statusResponse = await fetch(`${base}/api/outdoor-wifi/portal/renewals/status`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', cookie: sessionCookie },
+    body: JSON.stringify({ orderId: staleOrderId }),
+  });
+  assert.equal((await statusResponse.json()).status, 'retryable');
+
+  const unconfirmedRetry = await fetch(`${base}/api/outdoor-wifi/portal/renewals/start`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', cookie: sessionCookie },
+    body: JSON.stringify({ packageId: 'week' }),
+  });
+  assert.equal(unconfirmedRetry.status, 409);
+  assert.equal((await unconfirmedRetry.json()).error, 'RENEWAL_RETRY_CONFIRMATION_REQUIRED');
+  assert.equal(runtime.startedPaymentCount, 0);
+
+  const retriedResponse = await fetch(`${base}/api/outdoor-wifi/portal/renewals/start`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', cookie: sessionCookie },
+    body: JSON.stringify({ packageId: 'week', confirmRetry: true, retryOrderId: staleOrderId }),
+  });
+  const retried = await retriedResponse.json();
+  assert.equal(retriedResponse.status, 200);
+  assert.notEqual(retried.orderId, staleOrderId);
+  assert.equal(runtime.state.orders.get(staleOrderId).status, 'FAILED');
+  assert.equal(runtime.state.orders.get(retried.orderId).provider_checkout_id, 'ws_CO_renewal123');
+  assert.equal(runtime.startedPaymentCount, 1);
+
+  const duplicateStart = await fetch(`${base}/api/outdoor-wifi/portal/renewals/start`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', cookie: sessionCookie },
+    body: JSON.stringify({ packageId: 'week' }),
+  });
+  const duplicateResult = await duplicateStart.json();
+  assert.equal(duplicateStart.status, 200);
+  assert.equal(duplicateResult.orderId, retried.orderId);
+  assert.equal(runtime.startedPaymentCount, 1);
+  assert.equal(runtime.state.orders.size, 2);
+
+  runtime.providerStatus = 'failed';
+  const failedResponse = await fetch(`${base}/api/outdoor-wifi/portal/renewals/status`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', cookie: sessionCookie },
+    body: JSON.stringify({ orderId: retried.orderId }),
+  });
+  assert.equal((await failedResponse.json()).status, 'failed');
+  assert.equal(runtime.state.orders.get(retried.orderId).status, 'FAILED');
+
+  const nextAttemptResponse = await fetch(`${base}/api/outdoor-wifi/portal/renewals/start`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', cookie: sessionCookie },
+    body: JSON.stringify({ packageId: 'week' }),
+  });
+  const nextAttempt = await nextAttemptResponse.json();
+  assert.equal(nextAttemptResponse.status, 200);
+  assert.notEqual(nextAttempt.orderId, retried.orderId);
+  assert.equal(runtime.startedPaymentCount, 2);
+  assert.equal(runtime.state.orders.size, 3);
 });

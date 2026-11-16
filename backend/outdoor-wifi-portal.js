@@ -12,6 +12,7 @@ const PORTAL_SESSION_TTL_MS = 20 * 60 * 1000;
 const PORTAL_SESSION_COOKIE = 'supa_lan_portal_session';
 const PORTAL_SESSION_COOKIE_OPTIONS = { httpOnly: true, secure: true, sameSite: 'lax', path: '/' };
 const MAX_PAYMENT_AMOUNT_KES = 70000;
+const RENEWAL_STARTING_RETRY_AFTER_MS = 60_000;
 const SUPPORT_PHONE = '0113313240';
 const COURTNEY_CALLBACK_URL = 'https://anonymikeconnect-mpw.onrender.com/api/webhooks/courtneytech';
 const challengeSecret = crypto.randomBytes(32);
@@ -95,9 +96,10 @@ async function loadPortalData({ db, clientId, normalizePhone = normalizeKenyanPh
             previous_payment.paid_at as previous_paid_at,
             linked_order.status as linked_order_status,
             linked_order.payment_provider as linked_payment_provider,
-            linked_order.provider_checkout_id as linked_checkout_id,
-            linked_order.amount as linked_amount,
-            linked_package.name as linked_package_name
+                linked_order.provider_checkout_id as linked_checkout_id,
+                linked_order.amount as linked_amount,
+                linked_order.created_at as linked_order_created_at,
+                linked_package.name as linked_package_name
      from outdoor_wifi_clients c
      left join orders linked_order on linked_order.id = c.order_id
      left join packages linked_package on linked_package.id = linked_order.package_id
@@ -145,13 +147,16 @@ async function loadPortalData({ db, clientId, normalizePhone = normalizeKenyanPh
      order by p.price asc, p.id asc`
   );
   const linkedStatus = String(client.linked_order_status || '').toUpperCase();
+  const linkedOrderCreatedAt = new Date(client.linked_order_created_at).getTime();
+  const retryAvailable = !client.linked_checkout_id && Number.isFinite(linkedOrderCreatedAt) && timestamp - linkedOrderCreatedAt >= RENEWAL_STARTING_RETRY_AFTER_MS;
   const pendingRenewal = client.linked_payment_provider === 'COURTNEYTECH' && ['INITIATING', 'PENDING'].includes(linkedStatus)
     ? {
         orderId: client.order_id,
         checkoutRequestId: client.linked_checkout_id || null,
         packageName: client.linked_package_name || 'Selected package',
         amount: Number(client.linked_amount || 0),
-        state: linkedStatus === 'PENDING' ? 'pending' : 'initiating',
+        state: retryAvailable ? 'retryable' : client.linked_checkout_id ? 'pending' : 'initiating',
+        retryAvailable,
       }
     : null;
 
@@ -356,6 +361,8 @@ function createOutdoorPortalRouter({
 
   router.post('/renewals/start', requirePortalSession, async (req, res) => {
     const packageId = String(req.body?.packageId || '').trim();
+    const confirmRetry = req.body?.confirmRetry === true;
+    const retryOrderId = String(req.body?.retryOrderId || '').trim();
     if (!/^[a-zA-Z0-9_-]{1,80}$/.test(packageId)) {
       return res.status(400).json({ error: 'INVALID_PACKAGE', message: 'Choose a valid package to renew.' });
     }
@@ -363,6 +370,7 @@ function createOutdoorPortalRouter({
       return res.status(503).json({ error: 'PAYMENT_NOT_CONFIGURED', message: 'M-Pesa renewals are not configured yet. Please contact support.' });
     }
 
+    const timestamp = now();
     const connection = await db.connect();
     let transactionOpen = false;
     let renewal;
@@ -375,6 +383,7 @@ function createOutdoorPortalRouter({
                 linked_order.payment_provider as linked_payment_provider,
                 linked_order.provider_checkout_id,
                 linked_order.amount as linked_amount,
+                linked_order.created_at as linked_order_created_at,
                 linked_package.name as linked_package_name
          from outdoor_wifi_clients c
          left join orders linked_order on linked_order.id = c.order_id
@@ -391,19 +400,51 @@ function createOutdoorPortalRouter({
 
       const client = clientResult.rows[0];
       const linkedStatus = String(client.linked_order_status || '').toUpperCase();
-      if (client.linked_payment_provider === 'COURTNEYTECH' && ['INITIATING', 'PENDING'].includes(linkedStatus)) {
-        await connection.query('commit');
-        transactionOpen = false;
-        if (!client.provider_checkout_id) {
-          return res.status(409).json({ error: 'RENEWAL_STARTING', message: 'Your previous M-Pesa request is still being prepared. Please try again in a few seconds.' });
+      const linkedCourtneyOrder = client.linked_payment_provider === 'COURTNEYTECH' && ['INITIATING', 'PENDING'].includes(linkedStatus);
+      if (linkedCourtneyOrder) {
+        const linkedCreatedAt = new Date(client.linked_order_created_at).getTime();
+        const retryAvailable = !client.provider_checkout_id && Number.isFinite(linkedCreatedAt) && timestamp - linkedCreatedAt >= RENEWAL_STARTING_RETRY_AFTER_MS;
+        if (client.provider_checkout_id) {
+          await connection.query('commit');
+          transactionOpen = false;
+          return res.json({
+            orderId: client.order_id,
+            status: 'pending',
+            checkoutRequestId: client.provider_checkout_id,
+            packageName: client.linked_package_name || 'Selected package',
+            amount: Number(client.linked_amount || 0),
+          });
         }
-        return res.json({
-          orderId: client.order_id,
-          status: 'pending',
-          checkoutRequestId: client.provider_checkout_id,
-          packageName: client.linked_package_name || 'Selected package',
-          amount: Number(client.linked_amount || 0),
-        });
+
+        if (!retryAvailable || !confirmRetry || retryOrderId !== client.order_id) {
+          await connection.query('commit');
+          transactionOpen = false;
+          if (retryAvailable) {
+            return res.status(409).json({
+              error: 'RENEWAL_RETRY_CONFIRMATION_REQUIRED',
+              message: 'We could not confirm the previous M-Pesa request. Only retry if you did not approve or pay that prompt.',
+              retryAvailable: true,
+              orderId: client.order_id,
+              packageName: client.linked_package_name || 'Selected package',
+              amount: Number(client.linked_amount || 0),
+            });
+          }
+          return res.status(409).json({ error: 'RENEWAL_STARTING', message: 'Your previous M-Pesa request is still being prepared. Please wait while we confirm it.' });
+        }
+
+        const failedStaleOrder = await connection.query(
+          `update orders set status='FAILED', updated_at=now()
+           where id=$1 and payment_provider='COURTNEYTECH'
+             and status in ('INITIATING','PENDING')
+             and provider_checkout_id is null and created_at <= $2
+           returning id`,
+          [client.order_id, new Date(timestamp - RENEWAL_STARTING_RETRY_AFTER_MS)]
+        );
+        if (!failedStaleOrder.rowCount) {
+          await connection.query('rollback');
+          transactionOpen = false;
+          return res.status(409).json({ error: 'RENEWAL_CHANGED', message: 'The previous payment changed while you were retrying. Refresh your portal and check its status.' });
+        }
       }
 
       const packageResult = await connection.query(
@@ -466,36 +507,59 @@ function createOutdoorPortalRouter({
       connection.release();
     }
 
+    let payment;
     try {
-      const payment = await courtneyClient.startStk({
+      payment = await courtneyClient.startStk({
         phone: renewal.phone,
         amount: renewal.amount,
         reference: renewal.reference,
         description: 'Outdoor renew',
         callbackUrl: COURTNEY_CALLBACK_URL,
       });
-      await db.query(
-        `update orders
-         set status='PENDING', provider_checkout_id=$2, provider_request_id=$3,
-             provider_transaction_id=$4, updated_at=now()
-         where id=$1 and status='INITIATING'`,
-        [renewal.orderId, payment.checkoutRequestId, payment.merchantRequestId, payment.transactionId]
-      );
-      return res.json({
-        orderId: renewal.orderId,
-        status: 'pending',
-        checkoutRequestId: payment.checkoutRequestId,
-        packageName: renewal.packageName,
-        amount: renewal.amount,
-      });
     } catch (error) {
-      await db.query(`update orders set status='FAILED', updated_at=now() where id=$1 and status='PENDING' and provider_checkout_id is null`, [renewal.orderId]).catch(() => {});
+      const definitelyRejected = ['COURTNEY_AUTH_FAILED', 'COURTNEY_ACCOUNT_NOT_READY'].includes(error.code);
+      if (definitelyRejected) {
+        await db.query(`update orders set status='FAILED', updated_at=now() where id=$1 and status='PENDING' and provider_checkout_id is null`, [renewal.orderId]).catch(() => {});
+      }
       console.error('[OUTDOOR_PORTAL_RENEWAL] CourtneyTech STK request failed:', error.code || 'provider-error');
       return res.status(error.statusCode || 502).json({
         error: error.code || 'PAYMENT_START_FAILED',
-        message: error.message || 'We could not send the M-Pesa prompt. Please try again later.',
+        message: error.message || 'We could not confirm the M-Pesa request. Please check your phone before retrying.',
       });
     }
+
+    let savedCheckout;
+    try {
+      savedCheckout = await db.query(
+        `update orders
+         set status='PENDING', provider_checkout_id=$2, provider_request_id=$3,
+             provider_transaction_id=$4, updated_at=now()
+         where id=$1 and status='PENDING' and provider_checkout_id is null
+         returning id`,
+        [renewal.orderId, payment.checkoutRequestId, payment.merchantRequestId, payment.transactionId]
+      );
+    } catch (error) {
+      console.error('[OUTDOOR_PORTAL_RENEWAL] Checkout tracking save failed:', error.code || 'database-error');
+      return res.status(503).json({
+        error: 'PAYMENT_TRACKING_UNAVAILABLE',
+        message: 'The M-Pesa prompt may have been sent, but we could not save its reference. Check your phone before retrying.',
+      });
+    }
+    if (!savedCheckout.rowCount) {
+      console.error('[OUTDOOR_PORTAL_RENEWAL] Checkout tracking row was not updated.');
+      return res.status(409).json({
+        error: 'PAYMENT_TRACKING_UNAVAILABLE',
+        message: 'The M-Pesa request may have been sent, but its status could not be saved. Check your phone before retrying.',
+      });
+    }
+
+    return res.json({
+      orderId: renewal.orderId,
+      status: 'pending',
+      checkoutRequestId: payment.checkoutRequestId,
+      packageName: renewal.packageName,
+      amount: renewal.amount,
+    });
   });
 
   router.post('/renewals/status', requirePortalSession, async (req, res) => {
@@ -507,7 +571,8 @@ function createOutdoorPortalRouter({
     try {
       const result = await db.query(
         `select o.id, o.reference, o.status, o.payment_provider, o.provider_checkout_id,
-                o.amount, o.phone, o.mpesa_receipt, p.id as package_id, p.name as package_name, p.duration
+                o.amount, o.phone, o.mpesa_receipt, o.created_at,
+                p.id as package_id, p.name as package_name, p.duration
          from outdoor_wifi_clients c
          join orders o on o.id = c.order_id
          join packages p on p.id = o.package_id
@@ -526,7 +591,15 @@ function createOutdoorPortalRouter({
         return res.json({ status: localStatus.toLowerCase() });
       }
       if (localStatus === 'INITIATING' || !order.provider_checkout_id) {
-        return res.json({ status: 'initiating' });
+        const createdAt = new Date(order.created_at).getTime();
+        const retryAvailable = !order.provider_checkout_id && Number.isFinite(createdAt) && now() - createdAt >= RENEWAL_STARTING_RETRY_AFTER_MS;
+        return res.json({
+          status: retryAvailable ? 'retryable' : 'initiating',
+          retryAvailable,
+          orderId: order.id,
+          packageName: order.package_name,
+          amount: Number(order.amount || 0),
+        });
       }
 
       const provider = await courtneyClient.checkStatus(order.provider_checkout_id);
